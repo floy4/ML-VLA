@@ -1,0 +1,1132 @@
+[
+  {
+    "source_index": 215,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.15.mlp.gate_proj",
+    "sensitivity": 3.882761379650661
+  },
+  {
+    "source_index": 222,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.16.mlp.gate_proj",
+    "sensitivity": 3.7299191338675364
+  },
+  {
+    "source_index": 166,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.0.mlp.gate_proj",
+    "sensitivity": 3.7079749992915563
+  },
+  {
+    "source_index": 216,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.15.mlp.up_proj",
+    "sensitivity": 3.627659034729004
+  },
+  {
+    "source_index": 194,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.12.mlp.gate_proj",
+    "sensitivity": 3.5059327159609115
+  },
+  {
+    "source_index": 208,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.14.mlp.gate_proj",
+    "sensitivity": 3.2500248364039828
+  },
+  {
+    "source_index": 201,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.13.mlp.gate_proj",
+    "sensitivity": 3.158896541595459
+  },
+  {
+    "source_index": 8,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.0.self_attn.q_proj",
+    "sensitivity": 3.0516392469406126
+  },
+  {
+    "source_index": 236,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.2.mlp.gate_proj",
+    "sensitivity": 3.040969034603664
+  },
+  {
+    "source_index": 187,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.11.mlp.gate_proj",
+    "sensitivity": 2.8236974682126728
+  },
+  {
+    "source_index": 180,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.10.mlp.gate_proj",
+    "sensitivity": 2.6902348075594222
+  },
+  {
+    "source_index": 285,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.9.mlp.gate_proj",
+    "sensitivity": 2.648951370375497
+  },
+  {
+    "source_index": 195,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.12.mlp.up_proj",
+    "sensitivity": 2.6011287842478072
+  },
+  {
+    "source_index": 173,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.1.mlp.gate_proj",
+    "sensitivity": 2.59814372914178
+  },
+  {
+    "source_index": 209,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.14.mlp.up_proj",
+    "sensitivity": 2.551803893702371
+  },
+  {
+    "source_index": 264,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.6.mlp.gate_proj",
+    "sensitivity": 2.4926924228668215
+  },
+  {
+    "source_index": 271,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.7.mlp.gate_proj",
+    "sensitivity": 2.4233390876225065
+  },
+  {
+    "source_index": 243,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.3.mlp.gate_proj",
+    "sensitivity": 2.415995156764984
+  },
+  {
+    "source_index": 278,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.8.mlp.gate_proj",
+    "sensitivity": 2.411184355190822
+  },
+  {
+    "source_index": 84,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.17.mlp.gate_proj",
+    "sensitivity": 2.372073088373457
+  },
+  {
+    "source_index": 250,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.4.mlp.gate_proj",
+    "sensitivity": 2.3219080073492866
+  },
+  {
+    "source_index": 223,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.16.mlp.up_proj",
+    "sensitivity": 2.2358021889414106
+  },
+  {
+    "source_index": 202,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.13.mlp.up_proj",
+    "sensitivity": 2.140475130081177
+  },
+  {
+    "source_index": 147,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.8.mlp.gate_proj",
+    "sensitivity": 2.079997885227203
+  },
+  {
+    "source_index": 188,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.11.mlp.up_proj",
+    "sensitivity": 2.0637762819017684
+  },
+  {
+    "source_index": 257,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.5.mlp.gate_proj",
+    "sensitivity": 2.0257825340543474
+  },
+  {
+    "source_index": 107,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.3.self_attn.q_proj",
+    "sensitivity": 2.007684007712773
+  },
+  {
+    "source_index": 66,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.15.mlp.gate_proj",
+    "sensitivity": 1.992257182938712
+  },
+  {
+    "source_index": 75,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.16.mlp.gate_proj",
+    "sensitivity": 1.9566700066838945
+  },
+  {
+    "source_index": 138,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.7.mlp.gate_proj",
+    "sensitivity": 1.9539851069450378
+  },
+  {
+    "source_index": 181,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.10.mlp.up_proj",
+    "sensitivity": 1.9262753418513707
+  },
+  {
+    "source_index": 221,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.16.mlp.down_proj",
+    "sensitivity": 1.918239223105567
+  },
+  {
+    "source_index": 156,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.9.mlp.gate_proj",
+    "sensitivity": 1.8989999055862428
+  },
+  {
+    "source_index": 129,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.6.mlp.gate_proj",
+    "sensitivity": 1.8973614726747785
+  },
+  {
+    "source_index": 214,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.15.mlp.down_proj",
+    "sensitivity": 1.8395183086395264
+  },
+  {
+    "source_index": 286,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.9.mlp.up_proj",
+    "sensitivity": 1.7355363658496312
+  },
+  {
+    "source_index": 48,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.13.mlp.gate_proj",
+    "sensitivity": 1.7206384709903173
+  },
+  {
+    "source_index": 39,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.12.mlp.gate_proj",
+    "sensitivity": 1.671020781993866
+  },
+  {
+    "source_index": 17,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.1.self_attn.q_proj",
+    "sensitivity": 1.621512966496604
+  },
+  {
+    "source_index": 139,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.7.mlp.up_proj",
+    "sensitivity": 1.6034047552517483
+  },
+  {
+    "source_index": 21,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.10.mlp.gate_proj",
+    "sensitivity": 1.5595928958484104
+  },
+  {
+    "source_index": 57,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.14.mlp.gate_proj",
+    "sensitivity": 1.5262548548834665
+  },
+  {
+    "source_index": 279,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.8.mlp.up_proj",
+    "sensitivity": 1.5166623030390058
+  },
+  {
+    "source_index": 167,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.0.mlp.up_proj",
+    "sensitivity": 1.480331838130951
+  },
+  {
+    "source_index": 272,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.7.mlp.up_proj",
+    "sensitivity": 1.4365195734160288
+  },
+  {
+    "source_index": 30,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.11.mlp.gate_proj",
+    "sensitivity": 1.426699880191258
+  },
+  {
+    "source_index": 109,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.4.input_layernorm.dense",
+    "sensitivity": 1.4003330094473703
+  },
+  {
+    "source_index": 334,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.15.mlp.fc1",
+    "sensitivity": 1.39273134129388
+  },
+  {
+    "source_index": 111,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.4.mlp.gate_proj",
+    "sensitivity": 1.3865369149616786
+  },
+  {
+    "source_index": 340,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.16.mlp.fc1",
+    "sensitivity": 1.376664810521262
+  },
+  {
+    "source_index": 200,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.13.mlp.down_proj",
+    "sensitivity": 1.3674339924539838
+  },
+  {
+    "source_index": 98,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.2.self_attn.q_proj",
+    "sensitivity": 1.3280804583004542
+  },
+  {
+    "source_index": 265,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.6.mlp.up_proj",
+    "sensitivity": 1.30638017143522
+  },
+  {
+    "source_index": 106,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.3.self_attn.o_proj",
+    "sensitivity": 1.2978403500148228
+  },
+  {
+    "source_index": 193,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.12.mlp.down_proj",
+    "sensitivity": 1.2900082792554584
+  },
+  {
+    "source_index": 130,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.6.mlp.up_proj",
+    "sensitivity": 1.269423965045384
+  },
+  {
+    "source_index": 157,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.9.mlp.up_proj",
+    "sensitivity": 1.23563124026571
+  },
+  {
+    "source_index": 116,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.4.self_attn.q_proj",
+    "sensitivity": 1.2323101469448634
+  },
+  {
+    "source_index": 174,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.1.mlp.up_proj",
+    "sensitivity": 1.2283359885215759
+  },
+  {
+    "source_index": 148,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.8.mlp.up_proj",
+    "sensitivity": 1.2019069705690657
+  },
+  {
+    "source_index": 120,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.5.mlp.gate_proj",
+    "sensitivity": 1.1976553746632168
+  },
+  {
+    "source_index": 102,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.3.mlp.gate_proj",
+    "sensitivity": 1.196803834608623
+  },
+  {
+    "source_index": 346,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.17.mlp.fc1",
+    "sensitivity": 1.1772916632039205
+  },
+  {
+    "source_index": 328,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.14.mlp.fc1",
+    "sensitivity": 1.1771179599421364
+  },
+  {
+    "source_index": 186,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.11.mlp.down_proj",
+    "sensitivity": 1.1713752397469113
+  },
+  {
+    "source_index": 237,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.2.mlp.up_proj",
+    "sensitivity": 1.1673672803810664
+  },
+  {
+    "source_index": 207,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.14.mlp.down_proj",
+    "sensitivity": 1.1540788633482797
+  },
+  {
+    "source_index": 316,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.12.mlp.fc1",
+    "sensitivity": 1.1534954896995
+  },
+  {
+    "source_index": 406,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.26.mlp.fc1",
+    "sensitivity": 1.1508853478091103
+  },
+  {
+    "source_index": 100,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.3.input_layernorm.dense",
+    "sensitivity": 1.1489188926560538
+  },
+  {
+    "source_index": 322,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.13.mlp.fc1",
+    "sensitivity": 1.1365001159054893
+  },
+  {
+    "source_index": 82,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.17.input_layernorm.dense",
+    "sensitivity": 1.1343604666846139
+  },
+  {
+    "source_index": 352,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.18.mlp.fc1",
+    "sensitivity": 1.1317406024251666
+  },
+  {
+    "source_index": 85,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.17.mlp.up_proj",
+    "sensitivity": 1.1302348622253964
+  },
+  {
+    "source_index": 418,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.4.mlp.fc1",
+    "sensitivity": 1.1285566883427756
+  },
+  {
+    "source_index": 244,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.3.mlp.up_proj",
+    "sensitivity": 1.1271636690412248
+  },
+  {
+    "source_index": 67,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.15.mlp.up_proj",
+    "sensitivity": 1.1234730788639613
+  },
+  {
+    "source_index": 89,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.17.self_attn.q_proj",
+    "sensitivity": 1.123015341588429
+  },
+  {
+    "source_index": 86,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.17.post_attention_layernorm",
+    "sensitivity": 1.1187064698764255
+  },
+  {
+    "source_index": 73,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.16.input_layernorm.dense",
+    "sensitivity": 1.114379049198968
+  },
+  {
+    "source_index": 258,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.5.mlp.up_proj",
+    "sensitivity": 1.113320209298815
+  },
+  {
+    "source_index": 179,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.10.mlp.down_proj",
+    "sensitivity": 1.105088015113558
+  },
+  {
+    "source_index": 424,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.5.mlp.fc1",
+    "sensitivity": 1.1019410508019583
+  },
+  {
+    "source_index": 448,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.9.mlp.fc1",
+    "sensitivity": 1.0829830203737532
+  },
+  {
+    "source_index": 251,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.4.mlp.up_proj",
+    "sensitivity": 1.082456352881023
+  },
+  {
+    "source_index": 436,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.7.mlp.fc1",
+    "sensitivity": 1.0810342626912253
+  },
+  {
+    "source_index": 22,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.10.mlp.up_proj",
+    "sensitivity": 1.0775766015052795
+  },
+  {
+    "source_index": 442,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.8.mlp.fc1",
+    "sensitivity": 1.077109282357352
+  },
+  {
+    "source_index": 284,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.9.mlp.down_proj",
+    "sensitivity": 1.072259592158454
+  },
+  {
+    "source_index": 37,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.12.input_layernorm.dense",
+    "sensitivity": 1.0703671029635837
+  },
+  {
+    "source_index": 44,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.12.self_attn.q_proj",
+    "sensitivity": 1.0568036811692374
+  },
+  {
+    "source_index": 161,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.9.self_attn.q_proj",
+    "sensitivity": 1.0539207637310029
+  },
+  {
+    "source_index": 26,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.10.self_attn.q_proj",
+    "sensitivity": 1.0451550896678652
+  },
+  {
+    "source_index": 91,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.2.input_layernorm.dense",
+    "sensitivity": 1.0421707570552825
+  },
+  {
+    "source_index": 277,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.8.mlp.down_proj",
+    "sensitivity": 1.0406849988869258
+  },
+  {
+    "source_index": 103,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.3.mlp.up_proj",
+    "sensitivity": 1.039864743607385
+  },
+  {
+    "source_index": 270,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.7.mlp.down_proj",
+    "sensitivity": 1.0262798266751425
+  },
+  {
+    "source_index": 400,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.25.mlp.fc1",
+    "sensitivity": 1.024320923430579
+  },
+  {
+    "source_index": 304,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.10.mlp.fc1",
+    "sensitivity": 1.0157463337693895
+  },
+  {
+    "source_index": 310,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.11.mlp.fc1",
+    "sensitivity": 1.0140937439032964
+  },
+  {
+    "source_index": 358,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.19.mlp.fc1",
+    "sensitivity": 0.9969963133335114
+  },
+  {
+    "source_index": 40,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.12.mlp.up_proj",
+    "sensitivity": 0.9855614083153861
+  },
+  {
+    "source_index": 134,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.6.self_attn.q_proj",
+    "sensitivity": 0.9788123905658722
+  },
+  {
+    "source_index": 412,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.3.mlp.fc1",
+    "sensitivity": 0.9741630724498204
+  },
+  {
+    "source_index": 53,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.13.self_attn.q_proj",
+    "sensitivity": 0.960717156955174
+  },
+  {
+    "source_index": 226,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.16.self_attn.q_proj",
+    "sensitivity": 0.9594108700752259
+  },
+  {
+    "source_index": 263,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.6.mlp.down_proj",
+    "sensitivity": 0.9586348158972604
+  },
+  {
+    "source_index": 76,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.16.mlp.up_proj",
+    "sensitivity": 0.9457533657550812
+  },
+  {
+    "source_index": 112,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.4.mlp.up_proj",
+    "sensitivity": 0.9354097596236638
+  },
+  {
+    "source_index": 219,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.15.self_attn.q_proj",
+    "sensitivity": 0.9311554729938507
+  },
+  {
+    "source_index": 256,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.5.mlp.down_proj",
+    "sensitivity": 0.9267692872456141
+  },
+  {
+    "source_index": 370,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.20.mlp.fc1",
+    "sensitivity": 0.921439358166286
+  },
+  {
+    "source_index": 364,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.2.mlp.fc1",
+    "sensitivity": 0.9153927947793689
+  },
+  {
+    "source_index": 143,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.7.self_attn.q_proj",
+    "sensitivity": 0.9149647478546415
+  },
+  {
+    "source_index": 49,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.13.mlp.up_proj",
+    "sensitivity": 0.9124272840363639
+  },
+  {
+    "source_index": 430,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.6.mlp.fc1",
+    "sensitivity": 0.9015966381345476
+  },
+  {
+    "source_index": 165,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.0.mlp.down_proj",
+    "sensitivity": 0.9007030180522374
+  },
+  {
+    "source_index": 249,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.4.mlp.down_proj",
+    "sensitivity": 0.8956823408603668
+  },
+  {
+    "source_index": 242,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.3.mlp.down_proj",
+    "sensitivity": 0.8899336176259177
+  },
+  {
+    "source_index": 235,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.2.mlp.down_proj",
+    "sensitivity": 0.8865979177611215
+  },
+  {
+    "source_index": 31,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.11.mlp.up_proj",
+    "sensitivity": 0.8857349991798401
+  },
+  {
+    "source_index": 172,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.1.mlp.down_proj",
+    "sensitivity": 0.8775802544185094
+  },
+  {
+    "source_index": 80,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.16.self_attn.q_proj",
+    "sensitivity": 0.8676984591143472
+  },
+  {
+    "source_index": 7,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.0.self_attn.o_proj",
+    "sensitivity": 0.8595760566847664
+  },
+  {
+    "source_index": 394,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.24.mlp.fc1",
+    "sensitivity": 0.8516466549464634
+  },
+  {
+    "source_index": 376,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.21.mlp.fc1",
+    "sensitivity": 0.849815606219428
+  },
+  {
+    "source_index": 158,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.9.post_attention_layernorm",
+    "sensitivity": 0.8470760975565229
+  },
+  {
+    "source_index": 16,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.1.self_attn.o_proj",
+    "sensitivity": 0.8335574064935957
+  },
+  {
+    "source_index": 118,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.5.input_layernorm.dense",
+    "sensitivity": 0.8280563490731375
+  },
+  {
+    "source_index": 298,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.1.mlp.fc1",
+    "sensitivity": 0.8205493790762765
+  },
+  {
+    "source_index": 121,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.5.mlp.up_proj",
+    "sensitivity": 0.8115230236734663
+  },
+  {
+    "source_index": 131,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.6.post_attention_layernorm",
+    "sensitivity": 0.804040949685233
+  },
+  {
+    "source_index": 46,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.13.input_layernorm.dense",
+    "sensitivity": 0.8034235715866089
+  },
+  {
+    "source_index": 140,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.7.post_attention_layernorm",
+    "sensitivity": 0.7978497228452137
+  },
+  {
+    "source_index": 127,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.6.input_layernorm.dense",
+    "sensitivity": 0.7966187724045345
+  },
+  {
+    "source_index": 19,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.10.input_layernorm.dense",
+    "sensitivity": 0.7862007864883968
+  },
+  {
+    "source_index": 149,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.8.post_attention_layernorm",
+    "sensitivity": 0.7850383119923728
+  },
+  {
+    "source_index": 58,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.14.mlp.up_proj",
+    "sensitivity": 0.7760215265410287
+  },
+  {
+    "source_index": 152,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.8.self_attn.q_proj",
+    "sensitivity": 0.7626332947186061
+  },
+  {
+    "source_index": 382,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.22.mlp.fc1",
+    "sensitivity": 0.7578550585678645
+  },
+  {
+    "source_index": 92,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.2.mlp.down_proj",
+    "sensitivity": 0.7501239567995072
+  },
+  {
+    "source_index": 74,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.16.mlp.down_proj",
+    "sensitivity": 0.744942752804075
+  },
+  {
+    "source_index": 154,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.9.input_layernorm.dense",
+    "sensitivity": 0.7438371390104294
+  },
+  {
+    "source_index": 125,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.5.self_attn.q_proj",
+    "sensitivity": 0.7413844662053245
+  },
+  {
+    "source_index": 65,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.15.mlp.down_proj",
+    "sensitivity": 0.72393753187997
+  },
+  {
+    "source_index": 28,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.11.input_layernorm.dense",
+    "sensitivity": 0.7146554342338017
+  },
+  {
+    "source_index": 299,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.1.mlp.fc2",
+    "sensitivity": 0.7072266761745726
+  },
+  {
+    "source_index": 191,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.11.self_attn.q_proj",
+    "sensitivity": 0.6968337518828256
+  },
+  {
+    "source_index": 136,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.7.input_layernorm.dense",
+    "sensitivity": 0.695772317477635
+  },
+  {
+    "source_index": 77,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.16.post_attention_layernorm",
+    "sensitivity": 0.6929074027708598
+  },
+  {
+    "source_index": 124,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.5.self_attn.o_proj",
+    "sensitivity": 0.6828564439501081
+  },
+  {
+    "source_index": 41,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.12.post_attention_layernorm",
+    "sensitivity": 0.6808868178299495
+  },
+  {
+    "source_index": 101,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.3.mlp.down_proj",
+    "sensitivity": 0.6796357878616878
+  },
+  {
+    "source_index": 145,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.8.input_layernorm.dense",
+    "sensitivity": 0.6783203742333821
+  },
+  {
+    "source_index": 388,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.23.mlp.fc1",
+    "sensitivity": 0.677626006092344
+  },
+  {
+    "source_index": 205,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.13.self_attn.q_proj",
+    "sensitivity": 0.6718532055616379
+  },
+  {
+    "source_index": 113,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.4.post_attention_layernorm",
+    "sensitivity": 0.6713864151920591
+  },
+  {
+    "source_index": 64,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.15.input_layernorm.dense",
+    "sensitivity": 0.6639445390020098
+  },
+  {
+    "source_index": 50,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.13.post_attention_layernorm",
+    "sensitivity": 0.6617811952318464
+  },
+  {
+    "source_index": 23,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.10.post_attention_layernorm",
+    "sensitivity": 0.65938618012837
+  },
+  {
+    "source_index": 198,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.12.self_attn.q_proj",
+    "sensitivity": 0.6552830117089408
+  },
+  {
+    "source_index": 128,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.6.mlp.down_proj",
+    "sensitivity": 0.6299778095313481
+  },
+  {
+    "source_index": 71,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.15.self_attn.q_proj",
+    "sensitivity": 0.6257837078401021
+  },
+  {
+    "source_index": 1,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.0.input_layernorm.dense",
+    "sensitivity": 0.617789483496121
+  },
+  {
+    "source_index": 133,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.6.self_attn.o_proj",
+    "sensitivity": 0.6131381835256304
+  },
+  {
+    "source_index": 56,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.14.mlp.down_proj",
+    "sensitivity": 0.6102456552641732
+  },
+  {
+    "source_index": 110,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.4.mlp.down_proj",
+    "sensitivity": 0.5974328458309174
+  },
+  {
+    "source_index": 59,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.14.post_attention_layernorm",
+    "sensitivity": 0.5893220675843103
+  },
+  {
+    "source_index": 62,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.14.self_attn.q_proj",
+    "sensitivity": 0.5877004363707133
+  },
+  {
+    "source_index": 47,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.13.mlp.down_proj",
+    "sensitivity": 0.5870121955871582
+  },
+  {
+    "source_index": 104,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.3.post_attention_layernorm",
+    "sensitivity": 0.5776433395487922
+  },
+  {
+    "source_index": 97,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.2.self_attn.o_proj",
+    "sensitivity": 0.5768222157444273
+  },
+  {
+    "source_index": 155,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.9.mlp.down_proj",
+    "sensitivity": 0.5766336134501866
+  },
+  {
+    "source_index": 115,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.4.self_attn.o_proj",
+    "sensitivity": 0.5761288506644112
+  },
+  {
+    "source_index": 55,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.14.input_layernorm.dense",
+    "sensitivity": 0.5712972002370017
+  },
+  {
+    "source_index": 119,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.5.mlp.down_proj",
+    "sensitivity": 0.57093431694167
+  },
+  {
+    "source_index": 289,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.9.self_attn.q_proj",
+    "sensitivity": 0.5679869839123317
+  },
+  {
+    "source_index": 10,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.1.input_layernorm.dense",
+    "sensitivity": 0.5648557237216405
+  },
+  {
+    "source_index": 184,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.10.self_attn.q_proj",
+    "sensitivity": 0.5647132639374052
+  },
+  {
+    "source_index": 35,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.11.self_attn.q_proj",
+    "sensitivity": 0.5626028661217009
+  },
+  {
+    "source_index": 146,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.8.mlp.down_proj",
+    "sensitivity": 0.5542830620493208
+  },
+  {
+    "source_index": 293,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.0.mlp.fc2",
+    "sensitivity": 0.5541365781000682
+  },
+  {
+    "source_index": 32,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.11.post_attention_layernorm",
+    "sensitivity": 0.5527663328817912
+  },
+  {
+    "source_index": 413,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.3.mlp.fc2",
+    "sensitivity": 0.5527382684605462
+  },
+  {
+    "source_index": 38,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.12.mlp.down_proj",
+    "sensitivity": 0.5487852283886501
+  },
+  {
+    "source_index": 94,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.2.mlp.up_proj",
+    "sensitivity": 0.5472635980163302
+  },
+  {
+    "source_index": 137,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.7.mlp.down_proj",
+    "sensitivity": 0.5468596786260604
+  },
+  {
+    "source_index": 83,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.17.mlp.down_proj",
+    "sensitivity": 0.5447379499673843
+  },
+  {
+    "source_index": 68,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.15.post_attention_layernorm",
+    "sensitivity": 0.5419522770813533
+  },
+  {
+    "source_index": 212,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.14.self_attn.q_proj",
+    "sensitivity": 0.5348767523254667
+  },
+  {
+    "source_index": 365,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.2.mlp.fc2",
+    "sensitivity": 0.5297463055167879
+  },
+  {
+    "source_index": 419,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.4.mlp.fc2",
+    "sensitivity": 0.5283212240253176
+  },
+  {
+    "source_index": 122,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.5.post_attention_layernorm",
+    "sensitivity": 0.5243246099778585
+  },
+  {
+    "source_index": 20,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.10.mlp.down_proj",
+    "sensitivity": 0.5212925910949707
+  },
+  {
+    "source_index": 292,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.0.mlp.fc1",
+    "sensitivity": 0.5145764946937561
+  },
+  {
+    "source_index": 93,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.2.mlp.gate_proj",
+    "sensitivity": 0.5120736194508416
+  },
+  {
+    "source_index": 282,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.8.self_attn.q_proj",
+    "sensitivity": 0.5065449037722178
+  },
+  {
+    "source_index": 218,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.15.self_attn.o_proj",
+    "sensitivity": 0.5013260006904602
+  },
+  {
+    "source_index": 275,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.7.self_attn.q_proj",
+    "sensitivity": 0.49876257394041335
+  },
+  {
+    "source_index": 78,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.16.self_attn.k_proj",
+    "sensitivity": 0.4928550720214844
+  },
+  {
+    "source_index": 45,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.12.self_attn.v_proj",
+    "sensitivity": 0.4893775991031102
+  },
+  {
+    "source_index": 425,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.5.mlp.fc2",
+    "sensitivity": 0.48186141635690416
+  },
+  {
+    "source_index": 29,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.11.mlp.down_proj",
+    "sensitivity": 0.4759386658668518
+  },
+  {
+    "source_index": 341,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.16.mlp.fc2",
+    "sensitivity": 0.47481332761900763
+  },
+  {
+    "source_index": 3,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.0.mlp.gate_proj",
+    "sensitivity": 0.46033862701484135
+  },
+  {
+    "source_index": 303,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.1.self_attn.v_proj",
+    "sensitivity": 0.4600532978773117
+  },
+  {
+    "source_index": 170,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.0.self_attn.q_proj",
+    "sensitivity": 0.4584334748131888
+  },
+  {
+    "source_index": 300,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.1.self_attn.k_proj",
+    "sensitivity": 0.45677434163434166
+  },
+  {
+    "source_index": 353,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.18.mlp.fc2",
+    "sensitivity": 0.45484165591853004
+  },
+  {
+    "source_index": 347,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.17.mlp.fc2",
+    "sensitivity": 0.45248759388923643
+  },
+  {
+    "source_index": 437,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.7.mlp.fc2",
+    "sensitivity": 0.4517260125705174
+  },
+  {
+    "source_index": 335,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.15.mlp.fc2",
+    "sensitivity": 0.4516090908220836
+  },
+  {
+    "source_index": 295,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.0.self_attn.out_proj",
+    "sensitivity": 0.44661581473691125
+  },
+  {
+    "source_index": 431,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.6.mlp.fc2",
+    "sensitivity": 0.4400353448731559
+  },
+  {
+    "source_index": 323,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.13.mlp.fc2",
+    "sensitivity": 0.43948794901371
+  },
+  {
+    "source_index": 261,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.5.self_attn.q_proj",
+    "sensitivity": 0.4381778227431434
+  },
+  {
+    "source_index": 443,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.8.mlp.fc2",
+    "sensitivity": 0.43597147805350167
+  },
+  {
+    "source_index": 305,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.10.mlp.fc2",
+    "sensitivity": 0.4347156205347606
+  },
+  {
+    "source_index": 317,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.12.mlp.fc2",
+    "sensitivity": 0.43350926424775804
+  },
+  {
+    "source_index": 449,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.9.mlp.fc2",
+    "sensitivity": 0.4326267170054572
+  },
+  {
+    "source_index": 311,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.11.mlp.fc2",
+    "sensitivity": 0.43051373873438153
+  },
+  {
+    "source_index": 329,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.14.mlp.fc2",
+    "sensitivity": 0.4292842924594879
+  },
+  {
+    "source_index": 407,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.26.mlp.fc2",
+    "sensitivity": 0.42733100524970463
+  },
+  {
+    "source_index": 401,
+    "key": "paligemma_with_expert.paligemma.model.vision_tower.vision_model.encoder.layers.25.mlp.fc2",
+    "sensitivity": 0.4267398663929531
+  },
+  {
+    "source_index": 142,
+    "key": "paligemma_with_expert.gemma_expert.model.layers.7.self_attn.o_proj",
+    "sensitivity": 0.42578893985067096
+  },
+  {
+    "source_index": 247,
+    "key": "paligemma_with_expert.paligemma.model.language_model.layers.3.self_attn.q_proj",
+    "sensitivity": 0.4241138573203768
+  }
+]

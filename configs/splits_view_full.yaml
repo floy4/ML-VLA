@@ -1,0 +1,13 @@
+fullvw4:
+  test:
+  - l3_directional_low__de2a6ce7
+  - c3_v3l3__de2a6ce7
+  train:
+  - c1_v1l1__de2a6ce7
+  - c2_v2l2__de2a6ce7
+  - l1_warm_dim__de2a6ce7
+  - l2_cool_bright__de2a6ce7
+  - v1_azimuth30__de2a6ce7
+  - v2_azimuth60__de2a6ce7
+  - v3_elev15_zoom125__de2a6ce7
+  - clean__de2a6ce7

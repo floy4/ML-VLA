@@ -1,0 +1,18 @@
+hypernet:
+  condition_hidden_dim: 512
+  hidden_dim: 512
+  head_bottleneck: 32
+weight_target:
+  max_modules: 226
+normalization:
+  per_module: true
+  type: rms
+loss:
+  ab_mse: 1.0
+  delta_w: 0.1
+training:
+  lr: 0.0003
+  weight_decay: 0.00001
+  batch_size: 32
+  max_steps: 20000
+  early_stop_recon_cosine: 0.9999

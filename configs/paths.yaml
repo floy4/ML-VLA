@@ -1,0 +1,28 @@
+# Machine-specific paths. This is the ONLY file to edit when moving to a new
+# machine (plus regenerating configs/domains.yaml via build_domain_registry.py).
+# Override location with the MLVLA_PATHS env var.
+
+# external repos (not vendored; added to sys.path at runtime)
+openpi_root: /home/zhy/vla/openpi
+libero_plus_root: /home/zhy/vla/LIBERO-plus
+libero_root: /home/zhy/vla/LIBERO
+
+# base model + source data
+base_checkpoint: /data4/zhy/models/openpi-assets/checkpoints/pi05_base
+source_dataset: /data2/zhy/libero_v2_download          # LeRobot-format LIBERO source demos
+dinov3_model: /data2/zhy/models/dinov3-vitl16-pretrain-lvd1689m
+
+# caches / scratch
+lerobot_home: /data2/zhy
+hf_cache: /data6/zhy/hf_cache
+hf_datasets_cache: /data2/zhy/hf_datasets_cache
+tmpdir: /data2/tmp
+
+# pipeline outputs (repo-local outputs/ is gitignored)
+perturbed_root: /data2/zhy/wizard_perturbed            # replay-generated perturbed datasets
+expert_output_root: /data2/zhy/models/wizard/experts   # trained LoRA expert checkpoints
+campaign_expert_root: /data2/zhy/models/wizard/experts_perturbed_lagfix  # 90-domain oracle experts
+campaign_data_root: /data2/zhy/wizard_perturbed_lagfix_clean             # 90-domain replay datasets
+feature_cache_dir: /home/zhy/vla/meta_lora/outputs/feature_cache_90   # existing DINOv3 evidence cache (expensive, read-only reuse)
+hypernet_output_root: outputs/hypernet                 # trained hypernet bundles (repo-relative)
+generated_lora_root: outputs/generated_lora            # exported canonical npzs (repo-relative)

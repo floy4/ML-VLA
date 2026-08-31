@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlvla"
+version = "0.1.0"
+description = "Meta-LoRA VLA: perturbed-condition data collection, pi0.5 LoRA expert training, and DirectAB meta-network"
+requires-python = ">=3.8"
+dependencies = [
+  "numpy>=1.24",
+  "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+data = ["pyarrow>=14", "pillow>=10", "torch>=2.1", "mujoco", "dm_control"]
+jax = ["jax[cuda]>=0.4", "flax>=0.8", "orbax-checkpoint>=0.5", "optax", "etils", "tqdm_loggable"]
+meta = ["torch>=2.1", "transformers>=4.40"]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

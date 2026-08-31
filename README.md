@@ -17,7 +17,8 @@ Three pipelines, one package (`mlvla/`, src-layout):
 ## Setup
 
 Three conda environments (the pipelines have incompatible deps — MuJoCo stack vs
-JAX/openpi vs torch):
+JAX/openpi vs torch). Exact exports of the environments used in development are in
+[`envs/`](envs/):
 
 | Env | Used for | Entry points |
 |---|---|---|
@@ -25,7 +26,17 @@ JAX/openpi vs torch):
 | `openvla` (py3.12) | JAX: LoRA expert training, conversion, closed-loop evals, serving | `train_expert.py`, `convert_orbax_to_canonical.py`, `eval_closed_loop.py`, `eval_train_loss.py`, `eval_action_prediction.py`, `serve_lora_policy.py` |
 | `qwen3vl` | torch: meta-network training / eval / export | `train_hypernet.py`, `eval_hypernet.py`, `export_generated_lora.py`, `cache_domain_features.py`, tests |
 
-Install the package into each env (deps come from the env, not from pip):
+Recreate an environment:
+
+```bash
+conda env create -f envs/libero.yml     # or openvla.yml / qwen3vl.yml
+conda activate libero
+```
+
+The exports are full snapshots (`--no-builds`) of the dev machine, so they pin
+working versions of the MuJoCo/robosuite stack, JAX+openpi deps, and torch; expect
+some churn when recreating on a different CUDA/driver base. After creating an env,
+install this package into it (deps come from the env, not from pip):
 
 ```bash
 pip install -e . --no-deps

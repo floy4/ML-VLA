@@ -111,6 +111,17 @@ def main() -> None:
     oracle_paths = {d: Path(domains_yaml[d]["canonical_npz"]) for d in train_domains}
     rows = selected_rows(repo_root / f"configs/selected_modules_{rung}.json",
                          int(cfg["weight_target"]["max_modules"]))
+    # v1 compatibility: the v1 Concat column (v4.pt) trained on 456 modules —
+    # the current fullvw4 row set adds two lm_head modules whose B dimension is
+    # the 257k vocab, inflating V4's direct heads from 713M to ~4.9B params
+    # (untrainable on one A40). lm_head lora also receives zero gradient (the
+    # flow-matching loss never touches lm_head), so excluding it reproduces
+    # v1's module set exactly (verified set-equal against v4.pt).
+    exclude = tuple(cfg["weight_target"].get("exclude_key_substrings", ()))
+    if exclude:
+        n_before = len(rows)
+        rows = [r for r in rows if not any(s in r["key"] for s in exclude)]
+        print(f"module filter {exclude}: {n_before} -> {len(rows)} rows", flush=True)
     domain_targets, shapes, modules = load_direct_targets(oracle_paths, rows)
     from mlvla.meta.weights.normalization import compute_rms_scales, scales_to_dict
     scales = scales_to_dict(compute_rms_scales(domain_targets))
@@ -158,6 +169,41 @@ def main() -> None:
     val_evidence = {d: bank.domain_mean(d, "val").to("cuda") for d in train_domains}
     val_views = {d: bank.view(d).to("cuda").unsqueeze(0) for d in train_domains}
 
+    # ---- host<->device transfer batching ----
+    # 916 per-key .cpu()/.to("cuda") transfers per step dominated step time
+    # (~2.7s/it vs ~1.1s budget); move one flattened buffer each way instead.
+    sizes_a = [int(np.prod(shapes[k]["A"])) for k in keys]
+    sizes_b = [int(np.prod(shapes[k]["B"])) for k in keys]
+    # assemble() consumes every mapping key; keys absent from the trained set
+    # (e.g. lm_head under the v1-compat filter) contribute zeros — dead targets
+    # whose gradients are zero anyway.
+    site_shapes: dict[str, dict[str, tuple]] = {}
+    for site in backend.mapping.sites:
+        site_shapes.setdefault(site.key, {})[site.factor] = site.canonical_shape
+    extra_zero_ab = {k: {f: np.zeros(site_shapes[k][f], dtype=np.float32)
+                         for f in ("A", "B")}
+                     for k in backend.mapping.keys if k not in scales}
+
+    def lora_values(a_list, b_list) -> dict:
+        flat_a = torch.cat([t.reshape(-1) for t in a_list]).detach().cpu().numpy()
+        flat_b = torch.cat([t.reshape(-1) for t in b_list]).detach().cpu().numpy()
+        vals, ia, ib = {}, 0, 0
+        for i, k in enumerate(keys):
+            na, nb = sizes_a[i], sizes_b[i]
+            vals[k] = {"A": flat_a[ia:ia + na].reshape(shapes[k]["A"]),
+                       "B": flat_b[ib:ib + nb].reshape(shapes[k]["B"])}
+            ia += na
+            ib += nb
+        vals.update(extra_zero_ab)
+        return vals
+
+    def lora_grads(gmod) -> tuple[list, list]:
+        flat_ga = torch.from_numpy(np.concatenate([gmod[k]["A"].ravel() for k in keys]))
+        flat_gb = torch.from_numpy(np.concatenate([gmod[k]["B"].ravel() for k in keys]))
+        ga = [t.view(*shapes[k]["A"]) for t, k in zip(flat_ga.to("cuda").split(sizes_a), keys)]
+        gb = [t.view(*shapes[k]["B"]) for t, k in zip(flat_gb.to("cuda").split(sizes_b), keys)]
+        return ga, gb
+
     history = []
     rng_gen = torch.Generator().manual_seed(0)
     t0 = time.time()
@@ -187,9 +233,7 @@ def main() -> None:
         # elementwise-identical to the stacked formulation.
         a_phys = [pred[k]["A"].mean(0) * scale_a[i] for i, k in enumerate(keys)]
         b_phys = [pred[k]["B"].mean(0) * scale_b[i] for i, k in enumerate(keys)]
-        module_ab = {k: {"A": a_phys[i].detach().cpu().numpy(),
-                         "B": b_phys[i].detach().cpu().numpy()}
-                     for i, k in enumerate(keys)}
+        module_ab = lora_values(a_phys, b_phys)
         tensors = {p: jnp.asarray(t) for p, t in assemble(backend.mapping, module_ab).items()}
         key = jax.random.fold_in(jax.random.PRNGKey(0), step)
         loss, grads = backend.loss_and_grad(dict(tensors), key, obs, act)
@@ -197,8 +241,7 @@ def main() -> None:
         if not math.isfinite(loss):
             raise RuntimeError(f"step {step}: non-finite loss")
         gmod = disassemble(backend.mapping, {p: np.asarray(g) for p, g in grads.items()})
-        ga = [torch.from_numpy(gmod[k]["A"]).to("cuda") for k in keys]
-        gb = [torch.from_numpy(gmod[k]["B"]).to("cuda") for k in keys]
+        ga, gb = lora_grads(gmod)
         if not all(torch.isfinite(g).all() for g in ga + gb):
             raise RuntimeError(f"step {step}: non-finite lora grads")
 
@@ -236,9 +279,8 @@ def main() -> None:
                         preds = model(cond)
                     else:
                         preds = model(val_evidence[d], vv)
-                    ab = {k: {"A": (preds[k]["A"].mean(0) * scale_a[i]).cpu().numpy(),
-                              "B": (preds[k]["B"].mean(0) * scale_b[i]).cpu().numpy()}
-                          for i, k in enumerate(keys)}
+                    ab = lora_values([preds[k]["A"].mean(0) * scale_a[i] for i, k in enumerate(keys)],
+                                     [preds[k]["B"].mean(0) * scale_b[i] for i, k in enumerate(keys)])
                     tls = []
                     for _ in range(2):  # 2 val batches per domain
                         vo, va = next(val_iters[d])

@@ -12,6 +12,9 @@ train_domains:
   - clean__de2a6ce7
 weight_target:
   max_modules: 458
+  # v1 Concat column (v4.pt) module set: 456 — the two lm_head rows (B=vocab
+  # 257k) would inflate V4 heads to ~4.9B params and receive zero gradient.
+  exclude_key_substrings: [lm_head]
 training:
   max_steps: 60000
   batch_size: 8

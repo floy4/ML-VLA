@@ -58,6 +58,18 @@ _TARGET_TASK: str | None = None
 _ACTION_HORIZON: int = 10  # WizardPi05Config default; exclude last H-1 frames per episode
 DIAGNOSTIC_STEPS: int = 100  # First N steps log per-step finite checks + per-module grad norms
 
+_EPISODE_FILTER: set[int] | None = None  # optional episode whitelist (e2e train/val splits)
+
+
+def intersect_episodes(available: list[int], extra: set[int] | None) -> list[int]:
+    """Intersect available episode indices with an optional whitelist (sorted)."""
+    if extra is None:
+        return sorted(available)
+    kept = sorted(set(available) & extra)
+    if not kept:
+        raise ValueError("episode filter produced an empty set; check split ids vs dataset")
+    return kept
+
 
 def _get_perturbed_root() -> str | None:
     """Opt-in redirect to a perturbed dataset; None = use default source."""
@@ -127,6 +139,7 @@ def _patch_lerobot_dataset():
             task_to_eps = _load_task_to_episodes()
             task_eps = set(task_to_eps.get(_TARGET_TASK, []))
             available = [e for e in available if e in task_eps]
+            available = intersect_episodes(available, _EPISODE_FILTER)
             if not available:
                 raise ValueError(
                     f"Task {_TARGET_TASK!r} has no locally available episodes; "
@@ -219,7 +232,8 @@ def _patched_create_torch_dataset(data_config, action_horizon, model_config):
         task_to_eps = _load_task_to_episodes()
         task_eps = set(task_to_eps.get(_TARGET_TASK, []))
         available = _get_available_episodes()
-        episodes_filter = sorted(e for e in available if e in task_eps)
+        episodes_filter = intersect_episodes(
+            [e for e in available if e in task_eps], _EPISODE_FILTER)
         if not episodes_filter:
             raise ValueError(
                 f"Task {_TARGET_TASK!r} has no locally available episodes; "

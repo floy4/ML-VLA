@@ -50,6 +50,12 @@ def main() -> None:
     if checkpoint.get("evidence") == "dino_film":
         from mlvla.meta.hypernet import FiLMABHyperNetwork
         model = FiLMABHyperNetwork(**checkpoint["model_args"])
+    elif checkpoint.get("evidence") == "dino_film_shared":
+        from mlvla.meta.hypernet import SharedFiLMABHyperNetwork
+        model = SharedFiLMABHyperNetwork(**checkpoint["model_args"])
+    elif checkpoint.get("evidence") == "dino_view_v4":
+        from mlvla.meta.hypernet import V4DirectABHyperNetwork
+        model = V4DirectABHyperNetwork(**checkpoint["model_args"])
     else:
         model = DirectABHyperNetwork(**checkpoint["model_args"])
     model.load_state_dict(checkpoint["state_dict"])
@@ -61,13 +67,13 @@ def main() -> None:
         template_path = domains[domain]["canonical_npz"]
         blob = torch.load(args.features / f"{domain}_{split}.pt", map_location="cpu")
         evidence = blob[key].to(device)
-        if checkpoint.get("evidence") == "dino_view":
-            evidence = append_view_params(evidence, domain)
         with torch.inference_mode():
-            if checkpoint.get("evidence") == "dino_film":
+            if checkpoint.get("evidence") in ("dino_film", "dino_film_shared"):
                 view = torch.tensor(view_vector_for_domain(domain), device=device).expand(evidence.shape[0], -1)
                 prediction = model(evidence, view)
             else:
+                if checkpoint.get("evidence") in ("dino_view", "dino_view_v4"):
+                    evidence = append_view_params(evidence, domain)
                 prediction = model(evidence)
         arrays = {}
         with load_canonical(template_path) as template:
@@ -89,7 +95,11 @@ def main() -> None:
             manifest = dict(template.manifest)
         manifest["metadata"] = {
             **manifest.get("metadata", {}),
-            "generated_by": "FiLMABHyperNetwork" if checkpoint.get("evidence") == "dino_film" else "DirectABHyperNetwork",
+            "generated_by": {
+                "dino_film": "FiLMABHyperNetwork",
+                "dino_film_shared": "SharedFiLMABHyperNetwork",
+                "dino_view_v4": "V4DirectABHyperNetwork",
+            }.get(checkpoint.get("evidence"), "DirectABHyperNetwork"),
             "conditioning": checkpoint["source"],
             "domain": domain,
             "rung": args.rung,

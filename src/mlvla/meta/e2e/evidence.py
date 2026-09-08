@@ -8,11 +8,6 @@ import torch
 
 from mlvla.meta.view_params import view_vector_for_domain
 
-# Identity camera pose (no perturbation), used when the domain's condition part
-# is not in VIEW_PARAMS (e.g. synthetic domain names in tests). Real runs use
-# known conditions and never hit this branch.
-_IDENTITY_VIEW = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
-
 
 class EvidenceBank:
     def __init__(self, feature_dir: Path, domains: list[str], pooling: str = "patch") -> None:
@@ -42,5 +37,8 @@ class EvidenceBank:
         try:
             vec = view_vector_for_domain(domain)
         except ValueError:
-            vec = _IDENTITY_VIEW
+            raise KeyError(
+                f"unknown domain {domain!r}: no view params for condition "
+                f"{domain.split('__', 1)[0]!r} (see mlvla/meta/view_params.py VIEW_PARAMS)"
+            ) from None
         return torch.tensor(vec, dtype=torch.float32)

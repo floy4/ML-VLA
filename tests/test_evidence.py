@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import pytest
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -19,13 +20,28 @@ def _make_cache(tmp_path: Path):
 
 def test_sample_shape_and_view(tmp_path):
     from mlvla.meta.e2e.evidence import EvidenceBank
+    from mlvla.meta.view_params import VIEW_PARAMS
     _make_cache(tmp_path)
     bank = EvidenceBank(tmp_path, ["d1__t", "d2__t"])
     g = torch.Generator().manual_seed(0)
     x = bank.sample("d1__t", k=3, generator=g)
     assert x.shape == (3, 4, 1024)
-    v = bank.view("d2__t")
+    v = bank.view("clean__t")
     assert v.shape == (7,)
+    assert torch.equal(v, torch.tensor(VIEW_PARAMS["clean"], dtype=torch.float32))
+
+
+def test_view_unknown_domain_raises(tmp_path):
+    """Unknown domains must raise loudly (no silent identity-pose fallback).
+
+    Supersedes the old behavior where a domain typo silently trained with the
+    identity view and only exploded at export time (mirrors view_params.view_vector).
+    """
+    from mlvla.meta.e2e.evidence import EvidenceBank
+    _make_cache(tmp_path)
+    bank = EvidenceBank(tmp_path, ["d1__t", "d2__t"])
+    with pytest.raises(KeyError, match="d2__t.*view_params"):
+        bank.view("d2__t")
 
 
 def test_split_ids(tmp_path):

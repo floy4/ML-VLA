@@ -70,6 +70,12 @@ def main() -> None:
     if checkpoint.get("evidence") == "dino_film":
         from mlvla.meta.hypernet import FiLMABHyperNetwork
         model = FiLMABHyperNetwork(**checkpoint["model_args"])
+    elif checkpoint.get("evidence") == "dino_film_shared":
+        from mlvla.meta.hypernet import SharedFiLMABHyperNetwork
+        model = SharedFiLMABHyperNetwork(**checkpoint["model_args"])
+    elif checkpoint.get("evidence") == "dino_view_v4":
+        from mlvla.meta.hypernet import V4DirectABHyperNetwork
+        model = V4DirectABHyperNetwork(**checkpoint["model_args"])
     else:
         model = DirectABHyperNetwork(**checkpoint["model_args"])
     model.load_state_dict(checkpoint["state_dict"])
@@ -88,12 +94,12 @@ def main() -> None:
             blob = torch.load(args.features / f"{domain}_{'val' if args.eval_domains == 'train' else 'test'}.pt",
                               map_location="cpu")
             evidence = blob[key].to(device)
-            if checkpoint.get("evidence") == "dino_view":
-                evidence = append_view_params(evidence, domain)
-            if checkpoint.get("evidence") == "dino_film":
+            if checkpoint.get("evidence") in ("dino_film", "dino_film_shared"):
                 view = torch.tensor(view_vector_for_domain(domain), device=device).expand(evidence.shape[0], -1)
                 prediction = model(evidence, view)
             else:
+                if checkpoint.get("evidence") in ("dino_view", "dino_view_v4"):
+                    evidence = append_view_params(evidence, domain)
                 prediction = model(evidence)
             mean_prediction = {k: {f: t.mean(dim=0, keepdim=True) for f, t in factors.items()}
                                for k, factors in prediction.items()}

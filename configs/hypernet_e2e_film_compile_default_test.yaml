@@ -1,0 +1,30 @@
+rung: fullvw4
+task_prompt: "open the middle drawer of the cabinet"
+feature_cache_dir: /home/zhy/vla/meta_lora/outputs/feature_cache_90
+train_domains:
+  - c1_v1l1__de2a6ce7
+  - c2_v2l2__de2a6ce7
+  - l1_warm_dim__de2a6ce7
+  - l2_cool_bright__de2a6ce7
+  - v1_azimuth30__de2a6ce7
+  - v2_azimuth60__de2a6ce7
+  - v3_elev15_zoom125__de2a6ce7
+  - clean__de2a6ce7
+weight_target:
+  max_modules: 458
+training:
+  max_steps: 500
+  batch_size: 8
+  lr: 3.0e-4
+  weight_decay: 0.01
+  warmup: 100
+  clip: 1.0
+  val_every: 100
+  save_every: 500
+  evidence_k: 8
+hypernet:
+  dino_dim: 1024
+  condition_hidden_dim: 256
+  hidden_dim: 512
+  head_bottleneck: 32
+  dict_dim: 64

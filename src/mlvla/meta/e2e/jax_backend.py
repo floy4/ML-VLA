@@ -9,6 +9,7 @@ trip) is validated by the Task 7 smoke job; this module only wires it up.
 """
 from __future__ import annotations
 
+import dataclasses
 import os
 
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
@@ -24,6 +25,8 @@ _paths.add_to_sys_path()
 import sys
 
 sys.path.insert(0, str(Path(_paths.get("openpi_root")) / "scripts"))
+
+import numpy as np
 
 import jax
 import jax.numpy as jnp
@@ -71,7 +74,8 @@ class JAXBackend:
         config = tre.get_train_config(
             task_name="e2e_meta_net", output_dir=Path("/tmp/mlvla_e2e_unused"),
             num_steps=1, phase=1, batch_size=batch_size)
-        self.mesh = sharding.make_mesh(num_fsdp_devices=1)
+        num_fsdp = int(os.environ.get("MLVLA_NUM_FSDP_DEVICES", "1"))
+        self.mesh = sharding.make_mesh(num_fsdp_devices=num_fsdp)
         train_state, _ = tre.init_train_state(config, jax.random.PRNGKey(42), self.mesh)
         model = nnx.merge(train_state.model_def, train_state.params)
         model.train()
@@ -103,16 +107,71 @@ class JAXBackend:
             return jnp.mean(m.compute_loss(rng, obs, act, train=True)).astype(jnp.float32)
 
         self._loss_fn = _loss
-        self.loss_and_grad = jax.jit(jax.value_and_grad(_loss, argnums=0))
-        self.val_loss = jax.jit(_loss)
+        # Explicit in_shardings (mirroring openpi train.py ptrain_step): without
+        # them, a >1-device jit cannot reconcile data-sharded obs/act with
+        # device-0-committed lora/rng arrays (UnspecifiedValue crash on
+        # _array_shard_arg). Single-device runs are semantically unchanged.
+        replicated = jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec())
+        data_shard = jax.sharding.NamedSharding(
+            self.mesh, jax.sharding.PartitionSpec(sharding.DATA_AXIS))
+        in_shards = (replicated, replicated, data_shard, data_shard)
+
+        # LoRA values enter as ONE flat replicated arg instead of 916 small
+        # dict args: jax 0.5.3's SPMD partitioner produces NaN on multi-device
+        # runs when many small replicated traced args are merged into the
+        # model state inside the jit while obs/act are data-sharded (probe8/9:
+        # in-jit merge with lora args -> nan; same computation with lora as
+        # constants, or one packed arg -> finite, identical values). Unpacked
+        # back into a per-path dict before returning so callers are unchanged.
+        paths = tuple(self.mapping.tensors)
+        shapes = [tuple(self.mapping.tensors[p]) for p in paths]
+        sizes = [int(np.prod(s)) for s in shapes]
+
+        def _pack(d):
+            return jnp.concatenate([jnp.asarray(d[p]).reshape(-1) for p in paths])
+
+        def _unpack(flat):
+            out, off = {}, 0
+            for p, s, sz in zip(paths, sizes, shapes):
+                out[p] = jnp.reshape(flat[off:off + s], sz)
+                off += s
+            return out
+
+        def _loss_packed(flat, rng, obs, act):
+            return _loss(_unpack(flat), rng, obs, act)
+
+        grad_packed = jax.jit(jax.value_and_grad(_loss_packed, argnums=0),
+                              in_shardings=in_shards,
+                              out_shardings=(replicated, replicated))
+        val_packed = jax.jit(_loss_packed, in_shardings=in_shards,
+                             out_shardings=replicated)
+
+        def loss_and_grad(lora_values, rng, obs, act):
+            loss, gflat = grad_packed(_pack(lora_values), rng, obs, act)
+            return loss, _unpack(gflat)
+
+        def val_loss(lora_values, rng, obs, act):
+            return val_packed(_pack(lora_values), rng, obs, act)
+
+        self.loss_and_grad = loss_and_grad
+        self.val_loss = val_loss
+        # Exposed for flat-buffer fast paths (train_bridge) and timing probes:
+        # single-arg jits + the pack layout.
+        self.grad_packed = grad_packed
+        self.val_packed = val_packed
+        self.lora_flat_sizes = sizes
+        self.lora_flat_shapes = shapes
 
     def domain_loader(self, dataset_root: Path, task: str,
-                      episode_ids: set[int] | None, batch_size: int = 8) -> Iterator:
+                      episode_ids: set[int] | None, batch_size: int = 8,
+                      seed: int | None = None) -> Iterator:
         """Iterator over (obs, actions) jnp batches for one perturbed domain.
 
         Sets the perturbed-root env var and the trainer module globals before
         constructing the loader: create_data_loader builds its dataset eagerly,
         so _TARGET_TASK/_EPISODE_FILTER are consumed at call time (Task 3 hook).
+        ``seed`` overrides the config shuffle seed (per-rank data streams for
+        multi-process data parallel; None keeps the config default).
         """
         import openpi.training.data_loader as data_loader
         import openpi.training.sharding as sharding
@@ -123,6 +182,8 @@ class JAXBackend:
         config = self._tre.get_train_config(
             task_name=f"e2e_{dataset_root.name}", output_dir=Path("/tmp/mlvla_e2e_unused"),
             num_steps=1, phase=1, batch_size=batch_size)
+        if seed is not None:
+            config = dataclasses.replace(config, seed=seed)
         # Same construction as expert training (train.py main): DATA_AXIS spans
         # batch+fsdp mesh axes; with num_fsdp_devices=1 it shards across devices.
         data_sharding = jax.sharding.NamedSharding(

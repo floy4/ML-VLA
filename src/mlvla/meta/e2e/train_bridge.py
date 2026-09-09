@@ -90,6 +90,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)   # /data2/.../e2e_<variant>/
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--steps", type=int, default=None)
+    parser.add_argument("--compile", action="store_true", help="Enable torch.compile() for meta-net")
+    parser.add_argument("--compile-mode", default="reduce-overhead",
+                        choices=("default", "reduce-overhead", "max-autotune"),
+                        help="torch.compile() mode (default: reduce-overhead)")
+    parser.add_argument("--ddp", action="store_true",
+                        help="Multi-process data parallel (torchrun): one GPU per "
+                             "process, meta-net grads averaged via NCCL all-reduce. "
+                             "Effective batch = batch_size * world_size.")
     args = parser.parse_args()
 
     cfg = yaml.safe_load(args.config.read_text())
@@ -127,8 +135,26 @@ def main() -> None:
     scales = scales_to_dict(compute_rms_scales(domain_targets))
     del domain_targets  # targets only feed scale computation; e2e never regresses weights
     keys = sorted(scales)
-    scale_a = torch.tensor([scales[k]["A"] for k in keys], dtype=torch.float32, device="cuda")
-    scale_b = torch.tensor([scales[k]["B"] for k in keys], dtype=torch.float32, device="cuda")
+    # cuda:0 everywhere (never bare "cuda"): with >1 JAX device, XLA's
+    # cross-device transfers change the process CUDA current device mid-run
+    # (observed 0->1 after backend init, ->3 after first sharded batch), which
+    # silently retargets bare-"cuda" placements onto another GPU.
+    torch.cuda.set_device(0)
+    scale_a = torch.tensor([scales[k]["A"] for k in keys], dtype=torch.float32, device="cuda:0")
+    scale_b = torch.tensor([scales[k]["B"] for k in keys], dtype=torch.float32, device="cuda:0")
+
+    # ---- multi-process data parallel (one JAX backend per process; the
+    # single-process SPMD route is unusable on jax 0.5.3: sharded-batch
+    # executables read uninitialized memory — NaN losses and call-to-call
+    # nondeterminism with identical inputs) ----
+    if args.ddp:
+        import torch.distributed as dist
+        rank, world = int(os.environ["RANK"]), int(os.environ["WORLD_SIZE"])
+        dist.init_process_group("nccl")
+        print(f"[ddp] world={world} rank={rank} effective_batch={batch_size * world}", flush=True)
+    else:
+        dist, rank, world = None, 0, 1
+    is_main = rank == 0
 
     # ---- evidence ----
     from mlvla.meta.e2e.evidence import EvidenceBank
@@ -138,7 +164,11 @@ def main() -> None:
     # ---- torch meta-net ----
     torch.manual_seed(0)
     model_args = model_args_for(args.variant, shapes, cfg["hypernet"])
-    model = build_model(args.variant, shapes, cfg["hypernet"]).to("cuda")
+    model = build_model(args.variant, shapes, cfg["hypernet"]).to("cuda:0")
+    if args.compile:
+        print(f"Compiling meta-net with torch.compile(mode={args.compile_mode!r})...", flush=True)
+        model = torch.compile(model, mode=args.compile_mode)
+        print("Compilation done.", flush=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
 
     def lr_at(step: int) -> float:
@@ -161,16 +191,20 @@ def main() -> None:
         val_ids = set(bank.split_episode_ids(domain, "val")) | set(bank.split_episode_ids(domain, "test"))
         # train = full domain pool (expert-training semantics); the 13 val/test
         # evidence episodes per domain serve evidence/val monitoring only and
-        # are NOT excluded from the train pool.
-        train_iters[domain] = backend.domain_loader(root, task, episode_ids=None, batch_size=batch_size)
-        val_iters[domain] = backend.domain_loader(root, task, episode_ids=val_ids, batch_size=batch_size)
+        # are NOT excluded from the train pool. Per-rank seed: DDP ranks must
+        # not consume identical batches.
+        loader_seed = 42 + 1000 * rank
+        train_iters[domain] = backend.domain_loader(root, task, episode_ids=None,
+                                                    batch_size=batch_size, seed=loader_seed)
+        val_iters[domain] = backend.domain_loader(root, task, episode_ids=val_ids,
+                                                  batch_size=batch_size, seed=loader_seed)
 
     # pre-assembled per-domain val evidence for export parity with v1
-    val_evidence = {d: bank.domain_mean(d, "val").to("cuda") for d in train_domains}
-    val_views = {d: bank.view(d).to("cuda").unsqueeze(0) for d in train_domains}
+    val_evidence = {d: bank.domain_mean(d, "val").to("cuda:0") for d in train_domains}
+    val_views = {d: bank.view(d).to("cuda:0").unsqueeze(0) for d in train_domains}
 
     # ---- host<->device transfer batching ----
-    # 916 per-key .cpu()/.to("cuda") transfers per step dominated step time
+    # 916 per-key .cpu()/.to("cuda:0") transfers per step dominated step time
     # (~2.7s/it vs ~1.1s budget); move one flattened buffer each way instead.
     sizes_a = [int(np.prod(shapes[k]["A"])) for k in keys]
     sizes_b = [int(np.prod(shapes[k]["B"])) for k in keys]
@@ -200,12 +234,12 @@ def main() -> None:
     def lora_grads(gmod) -> tuple[list, list]:
         flat_ga = torch.from_numpy(np.concatenate([gmod[k]["A"].ravel() for k in keys]))
         flat_gb = torch.from_numpy(np.concatenate([gmod[k]["B"].ravel() for k in keys]))
-        ga = [t.view(*shapes[k]["A"]) for t, k in zip(flat_ga.to("cuda").split(sizes_a), keys)]
-        gb = [t.view(*shapes[k]["B"]) for t, k in zip(flat_gb.to("cuda").split(sizes_b), keys)]
+        ga = [t.view(*shapes[k]["A"]) for t, k in zip(flat_ga.to("cuda:0").split(sizes_a), keys)]
+        gb = [t.view(*shapes[k]["B"]) for t, k in zip(flat_gb.to("cuda:0").split(sizes_b), keys)]
         return ga, gb
 
     history = []
-    rng_gen = torch.Generator().manual_seed(0)
+    rng_gen = torch.Generator().manual_seed(1000 * rank)
     t0 = time.time()
     for step in range(1, total_steps + 1):
         for g in optimizer.param_groups:
@@ -213,11 +247,11 @@ def main() -> None:
         domain = train_domains[int(torch.randint(len(train_domains), (1,), generator=rng_gen))]
         obs, act = next(train_iters[domain])
 
-        x = bank.sample(domain, k=evidence_k, generator=rng_gen).to("cuda")
+        x = bank.sample(domain, k=evidence_k, generator=rng_gen).to("cuda:0")
         if view_dropout > 0.0:
-            keep = (torch.rand(x.shape[0], 1, 1, device="cuda") >= view_dropout).float()
+            keep = (torch.rand(x.shape[0], 1, 1, device="cuda:0") >= view_dropout).float()
             x = x * keep
-        v = bank.view(domain).to("cuda").unsqueeze(0).expand(x.shape[0], -1)
+        v = bank.view(domain).to("cuda:0").unsqueeze(0).expand(x.shape[0], -1)
 
         model.train()
         if args.variant == "concat":
@@ -256,16 +290,31 @@ def main() -> None:
                     for i in range(len(keys)))
         optimizer.zero_grad(set_to_none=True)
         proxy.backward()
+        if args.ddp:
+            # Average grads across ranks BEFORE clipping so every rank clips
+            # and steps identically (bit-exact weights thereafter).
+            with torch.no_grad():
+                for p in model.parameters():
+                    if p.grad is not None:
+                        dist.all_reduce(p.grad, op=dist.ReduceOp.SUM)
+                        p.grad /= world
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
+        if args.ddp and step == 1:
+            # One-shot sync check: identical inits + averaged grads + identical
+            # optimizer math must give bit-identical params on every rank.
+            local = torch.cat([p.detach().reshape(-1) for p in model.parameters()])
+            dist.broadcast(local, src=0)
+            assert torch.equal(local, torch.cat([p.detach().reshape(-1)
+                                                 for p in model.parameters()])), "DDP rank divergence"
 
-        if step == 1 or step % 50 == 0:
+        if is_main and (step == 1 or step % 50 == 0):
             norms_a = (sum(a.detach().norm() for a in a_phys) / len(keys)).item()
             norms_b = (sum(b.detach().norm() for b in b_phys) / len(keys)).item()
             print(f"step {step:6d} domain={domain.split('__')[0]:<22s} loss={loss:.5f} "
                   f"|A|={norms_a:.2f} |B|={norms_b:.2f} lr={lr_at(step):.2e} "
                   f"({(time.time()-t0)/step:.2f}s/it)", flush=True)
-        if step % val_every == 0 or step == total_steps:
+        if is_main and (step % val_every == 0 or step == total_steps):
             model.eval()
             vls = {}
             with torch.inference_mode():
@@ -293,7 +342,7 @@ def main() -> None:
             print(f"[val] step {step} mean={mean_v:.5f} " +
                   " ".join(f"{k}={v:.4f}" for k, v in vls.items()), flush=True)
 
-        if step % save_every == 0 or step == total_steps:
+        if is_main and (step % save_every == 0 or step == total_steps):
             ckpt = args.output / f"step{step}.pt"
             ckpt.parent.mkdir(parents=True, exist_ok=True)
             torch.save({
@@ -310,7 +359,11 @@ def main() -> None:
             }, ckpt)
             print(f"saved {ckpt}", flush=True)
 
-    print(f"done in {(time.time()-t0)/3600:.2f}h; history tail: {history[-1] if history else None}")
+    if is_main:
+        print(f"done in {(time.time()-t0)/3600:.2f}h; history tail: "
+              f"{history[-1] if history else None}")
+    if args.ddp:
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":

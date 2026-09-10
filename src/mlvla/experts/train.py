@@ -139,12 +139,15 @@ def _patch_lerobot_dataset():
             task_to_eps = _load_task_to_episodes()
             task_eps = set(task_to_eps.get(_TARGET_TASK, []))
             available = [e for e in available if e in task_eps]
-            available = intersect_episodes(available, _EPISODE_FILTER)
-            if not available:
-                raise ValueError(
-                    f"Task {_TARGET_TASK!r} has no locally available episodes; "
-                    "refusing to silently train on the full LIBERO dataset"
-                )
+        # The episode whitelist applies in multitask mode too (_TARGET_TASK
+        # None): e2e val loaders pass val/test ids with no task filter, and
+        # without this they would silently load the full train pool.
+        available = intersect_episodes(available, _EPISODE_FILTER)
+        if not available:
+            raise ValueError(
+                f"Task {_TARGET_TASK!r} has no locally available episodes; "
+                "refusing to silently train on the full LIBERO dataset"
+            )
 
         if available and not kwargs.get("episodes"):
             kwargs["episodes"] = available
@@ -232,13 +235,18 @@ def _patched_create_torch_dataset(data_config, action_horizon, model_config):
         task_to_eps = _load_task_to_episodes()
         task_eps = set(task_to_eps.get(_TARGET_TASK, []))
         available = _get_available_episodes()
-        episodes_filter = intersect_episodes(
-            [e for e in available if e in task_eps], _EPISODE_FILTER)
+        episodes_filter = [e for e in available if e in task_eps]
         if not episodes_filter:
             raise ValueError(
                 f"Task {_TARGET_TASK!r} has no locally available episodes; "
                 "check the exact metadata task string"
             )
+    if _EPISODE_FILTER is not None:
+        # Multitask (_TARGET_TASK None) e2e val loaders rely on this filter;
+        # without it the val dataset silently becomes the full train pool.
+        if episodes_filter is None:
+            episodes_filter = _get_available_episodes()
+        episodes_filter = intersect_episodes(episodes_filter, _EPISODE_FILTER)
 
     dataset = lerobot_dataset.LeRobotDataset(
         data_config.repo_id,

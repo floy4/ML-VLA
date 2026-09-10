@@ -27,11 +27,23 @@ def _qconj(q):
 
 def test_table_basics():
     assert VIEW_DIM == 7
-    # 9 perturbed conditions + clean (identity view)
-    assert len(VIEW_PARAMS) == 10
+    # 9 perturbed conditions + clean (identity view) + 12 level multitask domains
+    assert len(VIEW_PARAMS) == 22
     for vec in VIEW_PARAMS.values():
         assert len(vec) == VIEW_DIM
         assert math.isclose(sum(v * v for v in vec[3:]), 1.0, abs_tol=1e-5)
+
+
+def test_level_domain_vectors():
+    identity = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+    for cond in ("lighting", "noise", "texture"):
+        for lvl in "123":
+            assert VIEW_PARAMS[f"{cond}_L{lvl}"] == identity
+    # no '__' suffix: the level domain id itself is the condition key
+    assert view_vector_for_domain("camera_L2") == VIEW_PARAMS["camera_L2"]
+    # camera levels are non-identity with pose offset growing by level
+    norms = [math.dist(VIEW_PARAMS[f"camera_L{lvl}"][:3], (0, 0, 0)) for lvl in "123"]
+    assert norms[0] < norms[1] < norms[2]
 
 
 def test_combos_equal_view_components():

@@ -103,7 +103,10 @@ def main() -> None:
     cfg = yaml.safe_load(args.config.read_text())
     rung = cfg["rung"]                      # e.g. "fullvw4"
     train_domains = cfg["train_domains"]    # 8 domains (with __de2a6ce7 suffix)
-    task = cfg["task_prompt"]               # "open the middle drawer of the cabinet"
+    # None (or missing task_prompt) = multitask: no _TARGET_TASK filter, prompts
+    # come per-episode from meta/tasks.parquet (prompt_from_task=True in
+    # get_data_config), so one domain loader covers all of the domain's tasks.
+    task = cfg.get("task_prompt")
     tr = cfg["training"]
     total_steps = args.steps or (500 if args.smoke else int(tr["max_steps"]))
     batch_size, lr, wd = int(tr["batch_size"]), float(tr["lr"]), float(tr["weight_decay"])

@@ -149,9 +149,20 @@ def main() -> None:
     # nondeterminism with identical inputs) ----
     if args.ddp:
         import torch.distributed as dist
+        from datetime import timedelta
         rank, world = int(os.environ["RANK"]), int(os.environ["WORLD_SIZE"])
-        dist.init_process_group("nccl")
+        # Staggered heavy init (MLVLA_DDP_STAGGER_S below) delays later ranks'
+        # first collective past NCCL's default 10-min timeout; 60 min covers it.
+        dist.init_process_group("nccl", timeout=timedelta(minutes=60))
         print(f"[ddp] world={world} rank={rank} effective_batch={batch_size * world}", flush=True)
+        # One rank's startup (oracle-target staging, 3B-param model host load,
+        # 16 eager dataset builds, XLA compile of the fused loss) transiently
+        # takes ~O(100GB) host RAM; 4 concurrent startups OOM-killed a rank on
+        # a 503GB host (SIGKILL mid-init). Stagger so spikes don't co-occur.
+        _stagger = rank * float(os.environ.get("MLVLA_DDP_STAGGER_S", "420"))
+        if _stagger > 0:
+            print(f"[ddp] rank={rank} staggering heavy init by {_stagger:.0f}s", flush=True)
+            time.sleep(_stagger)
     else:
         dist, rank, world = None, 0, 1
     is_main = rank == 0

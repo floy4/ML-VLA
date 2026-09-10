@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Mapping
 
 from flax import nnx
@@ -119,9 +121,22 @@ def inject_table8_adapter(model: nnx.Module, adapter: CanonicalLoRAAdapter) -> N
             raise ValueError(f"{module.key}: missing jax_stem metadata")
         grouped.setdefault((str(meta["jax_stem"]), meta.get("index")), {})[meta.get("split")] = module
 
+    skipped: list[str] = []
     for (stem, index), splits in grouped.items():
         string_flat = {"/".join(map(str, path)): variable for path, variable in flat.items()}
-        a_key, b_key = _factor_keys(string_flat, stem)
+        try:
+            a_key, b_key = _factor_keys(string_flat, stem)
+        except KeyError:
+            # The eval-side model (vanilla openpi lora variants) carries no
+            # lm_head lora, while trainer-side canonical npz may cover all 458
+            # modules. Dropping lm_head is exact for this pipeline: the
+            # flow-matching loss never touches lm_head (zero gradient — any
+            # predicted B is untrained noise), and action inference reads no
+            # lm_head logits. max|B| is reported so a future stem that carries
+            # real trained weights is visible rather than silently dropped.
+            bmax = max(float(np.max(np.abs(module.B))) for module in splits.values())
+            skipped.append(f"{stem}(max|B|={bmax:.3g})")
+            continue
         a_path, b_path = tuple(a_key.split("/")), tuple(b_key.split("/"))
         old_a, old_b = np.asarray(flat[a_path].value), np.asarray(flat[b_path].value)
         # A scanned tensor is shared by every logical layer.  Several grouped
@@ -146,6 +161,11 @@ def inject_table8_adapter(model: nnx.Module, adapter: CanonicalLoRAAdapter) -> N
             else:
                 new_a[index, split], new_b[index, split] = a, b
         replacements[a_path], replacements[b_path] = new_a, new_b
+
+    if skipped:
+        logging.getLogger(__name__).warning(
+            "Skipped %d module(s) with zero B absent from model lora sites: %s",
+            len(skipped), sorted(set(skipped)))
 
     new_items = []
     for path, variable in flat.items():

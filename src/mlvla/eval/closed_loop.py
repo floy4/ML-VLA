@@ -38,7 +38,6 @@ from libero.libero.envs import OffScreenRenderEnv
 import openpi.training.config as _config
 import openpi.training.sharding as sharding
 import openpi.training.weight_loaders as weight_loaders
-from openpi.models import pi0_config
 
 import lerobot.datasets.lerobot_dataset as _lerobot_dataset
 _lerobot_dataset.CODEBASE_VERSION = "v3.0"
@@ -106,13 +105,11 @@ def _make_eval_config(checkpoint_type, task_name):
         )
 
     base = _config.get_config("pi0_libero_low_mem_finetune")
-    model_config = pi0_config.Pi0Config(
-        pi05=True,
-        action_horizon=10,
-        discrete_state_input=False,
-        paligemma_variant="gemma_2b_lora",
-        action_expert_variant="gemma_300m_lora",
-    )
+    # Must be the trainer's WizardPi05Config, not a vanilla Pi0Config: the
+    # patched model carries rank-16 lora on every site (vanilla gemma_300m_lora
+    # is rank 32) and lm_head lora sites, so canonical npz injection reshapes
+    # exactly. A vanilla model silently mismatches ranks and lacks lm_head.
+    model_config = tre.get_model_config()
     return dataclasses.replace(
         base,
         name="pi05_libero_lora_goal_expert_eval",

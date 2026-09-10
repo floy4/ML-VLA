@@ -335,14 +335,17 @@ def main() -> None:
                 for d in train_domains:
                     ev = val_evidence[d]
                     n_val = ev.shape[0]
-                    # Chunk the meta-net forward: level-domain val pools reach
-                    # hundreds of episodes (vs ~13 for lagfix), and one full-batch
-                    # V4-head forward OOMs beside the JAX allocation. The consumer
-                    # takes .mean(0) over episodes, so concatenated chunks give
-                    # bit-identical results.
-                    preds: dict = {}
+                    # Level-domain val pools reach hundreds of episodes (vs ~13
+                    # for lagfix) and each episode's predicted LoRA set is ~46M
+                    # floats (~184MB fp32): materializing all per-episode outputs
+                    # (let alone one full-batch forward) OOMs beside the JAX
+                    # allocation. Accumulate a running SUM per chunk instead;
+                    # sum/n equals the .mean(0) the consumer used.
+                    sum_a = {k: None for k in keys}
+                    sum_b = {k: None for k in keys}
                     for s in range(0, n_val, 32):
-                        e, w = ev[s:s + 32], val_views[d].expand(ev.shape[0], -1)[s:s + 32]
+                        e = ev[s:s + 32]
+                        w = val_views[d].expand(ev.shape[0], -1)[s:s + 32]
                         if args.variant == "concat":
                             cond = torch.cat(
                                 [e, w.unsqueeze(1).expand(-1, e.shape[1], -1)], dim=-1)
@@ -350,13 +353,12 @@ def main() -> None:
                         else:
                             p = model(e, w)
                         for k, ab in p.items():
-                            slot = preds.setdefault(k, {"A": [], "B": []})
-                            slot["A"].append(ab["A"])
-                            slot["B"].append(ab["B"])
-                    preds = {k: {"A": torch.cat(v["A"]), "B": torch.cat(v["B"])}
-                             for k, v in preds.items()}
-                    ab = lora_values([preds[k]["A"].mean(0) * scale_a[i] for i, k in enumerate(keys)],
-                                     [preds[k]["B"].mean(0) * scale_b[i] for i, k in enumerate(keys)])
+                            sa, sb = ab["A"].sum(0), ab["B"].sum(0)
+                            sum_a[k] = sa if sum_a[k] is None else sum_a[k] + sa
+                            sum_b[k] = sb if sum_b[k] is None else sum_b[k] + sb
+                        del p
+                    ab = lora_values([(sum_a[k] / n_val) * scale_a[i] for i, k in enumerate(keys)],
+                                     [(sum_b[k] / n_val) * scale_b[i] for i, k in enumerate(keys)])
                     tls = []
                     for _ in range(2):  # 2 val batches per domain
                         vo, va = next(val_iters[d])

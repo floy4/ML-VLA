@@ -67,14 +67,31 @@ def main() -> None:
         template_path = domains[domain]["canonical_npz"]
         blob = torch.load(args.features / f"{domain}_{split}.pt", map_location="cpu")
         evidence = blob[key].to(device)
+        n = evidence.shape[0]
+        # Chunked forward with a running sum: each episode's predicted LoRA set
+        # is ~46M floats (~184MB fp32); level-domain eval pools reach hundreds
+        # of episodes, and one full-batch forward (or materializing all
+        # per-episode outputs) OOMs. sum/n equals the former .mean(dim=0).
+        sum_a = {k: None for k in selected.values()}
+        sum_b = {k: None for k in selected.values()}
         with torch.inference_mode():
-            if checkpoint.get("evidence") in ("dino_film", "dino_film_shared"):
-                view = torch.tensor(view_vector_for_domain(domain), device=device).expand(evidence.shape[0], -1)
-                prediction = model(evidence, view)
-            else:
-                if checkpoint.get("evidence") in ("dino_view", "dino_view_v4"):
-                    evidence = append_view_params(evidence, domain)
-                prediction = model(evidence)
+            for s in range(0, n, 32):
+                e = evidence[s:s + 32]
+                if checkpoint.get("evidence") in ("dino_film", "dino_film_shared"):
+                    view = torch.tensor(view_vector_for_domain(domain), device=device).expand(e.shape[0], -1)
+                    p = model(e, view)
+                else:
+                    if checkpoint.get("evidence") in ("dino_view", "dino_view_v4"):
+                        e = append_view_params(e, domain)
+                    p = model(e)
+                for k, ab in p.items():
+                    if k not in sum_a:
+                        continue
+                    sa, sb = ab["A"].sum(0), ab["B"].sum(0)
+                    sum_a[k] = sa if sum_a[k] is None else sum_a[k] + sa
+                    sum_b[k] = sb if sum_b[k] is None else sum_b[k] + sb
+                del p
+        prediction = {k: {"A": sum_a[k] / n, "B": sum_b[k] / n} for k in sum_a}
         arrays = {}
         with load_canonical(template_path) as template:
             for module_index in range(len(template)):
@@ -82,11 +99,11 @@ def main() -> None:
                 if module_index in selected:
                     module_key = selected[module_index]
                     arrays[f"module_{module_index}_A"] = (
-                        prediction[module_key]["A"].mean(dim=0).cpu().numpy()
+                        prediction[module_key]["A"].cpu().numpy()
                         * checkpoint["scales"][module_key]["A"]
                     ).astype(np.float32)
                     arrays[f"module_{module_index}_B"] = (
-                        prediction[module_key]["B"].mean(dim=0).cpu().numpy()
+                        prediction[module_key]["B"].cpu().numpy()
                         * checkpoint["scales"][module_key]["B"]
                     ).astype(np.float32)
                 else:

@@ -1,0 +1,19 @@
+# Level-domain multitask export splits: train = L1/L2 (the 8 e2e training
+# domains), test = L3 (held-out OOD). Domain keys are the plain level names
+# in domains.yaml (no __de2a6ce7 suffix); evidence blobs come from
+# feature_cache_dir = /home/zhy/vla/meta_lora/outputs/feature_cache_level.
+fullvw4:
+  train:
+  - camera_L1
+  - camera_L2
+  - lighting_L1
+  - lighting_L2
+  - noise_L1
+  - noise_L2
+  - texture_L1
+  - texture_L2
+  test:
+  - camera_L3
+  - lighting_L3
+  - noise_L3
+  - texture_L3

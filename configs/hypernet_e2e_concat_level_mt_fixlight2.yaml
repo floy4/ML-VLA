@@ -1,0 +1,50 @@
+rung: fullvw4
+# Fixlight2: weighted continuation from fixlight step5000.pt. The lighting_L3
+# pool is 82% barely-L3 libero_object episodes (d_luma -0.305..-0.314) and only
+# 18% extreme-dark libero_10 episodes (-0.30..-0.39, the closed-loop eval band)
+# — fixlight v1 sampled it uniformly, giving ~100 extreme-dark steps in 5k.
+# This run carves the libero_10 subset out as pseudo-domain lighting_L3__deep
+# (episodes 0-131 of the same dataset/oracle; same identity view vector via the
+# '__' suffix) and upweights both: L3 x2, deep x3 of 13 weight units -> deep
+# ~23% of steps ~ 1150 steps ~ 9200 extreme-dark samples (~11x fixlight).
+# Launch with: train_e2e.py --init-checkpoint .../e2e_concat_level_mt_fixlight/step5000.pt
+task_prompt: null
+feature_cache_dir: /home/zhy/vla/meta_lora/outputs/feature_cache_level
+train_domains:
+  - camera_L1
+  - camera_L2
+  - lighting_L1
+  - lighting_L2
+  - lighting_L3
+  - lighting_L3__deep
+  - noise_L1
+  - noise_L2
+  - texture_L1
+  - texture_L2
+train_domain_weights:
+  lighting_L3: 2.0
+  lighting_L3__deep: 3.0
+train_pool_from_bank:
+  - lighting_L3__deep
+weight_target:
+  max_modules: 458
+  exclude_key_substrings: [lm_head]
+training:
+  # Continuation of the warm-started run: same flat lr, another 5k steps.
+  max_steps: 5000
+  batch_size: 8
+  lr: 1.5e-4
+  lr_constant: true
+  weight_decay: 0.01
+  warmup: 100
+  clip: 1.0
+  val_every: 500
+  save_every: 500
+  evidence_k: 8
+hypernet:            # V4DirectABHyperNetwork (same as e2e_concat_level_mt)
+  dino_dim: 1024
+  condition_hidden_dim: 256
+  hidden_dim: 512
+  id_dim: 256
+  trunk_layers: 6
+  trunk_hidden: 1024

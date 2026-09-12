@@ -120,6 +120,14 @@ def main() -> None:
                                            int(tr["val_every"]), int(tr["save_every"]))
     view_dropout = 0.3 if args.variant == "film_dropout" else 0.0
     evidence_k = int(tr.get("evidence_k", 8))
+    # Optional per-domain sampling weights (default 1.0) and pseudo-domains
+    # (carved out of a parent dataset, e.g. lighting_L3__deep) whose TRAIN pool
+    # is the bank's train split for that domain key instead of the full dataset.
+    domain_weights = {d: float(w) for d, w in cfg.get("train_domain_weights", {}).items()}
+    pool_from_bank = set(cfg.get("train_pool_from_bank", ()))
+    unknown = (set(domain_weights) | pool_from_bank) - set(train_domains)
+    if unknown:
+        raise SystemExit(f"config references unknown train domains: {sorted(unknown)}")
 
     # ---- targets/scales (identical to v1 weight-regression protocol) ----
     from mlvla.meta.weights.targets import load_direct_targets, selected_rows
@@ -230,10 +238,17 @@ def main() -> None:
         val_ids = set(bank.split_episode_ids(domain, "val")) | set(bank.split_episode_ids(domain, "test"))
         # train = full domain pool (expert-training semantics); the 13 val/test
         # evidence episodes per domain serve evidence/val monitoring only and
-        # are NOT excluded from the train pool. Per-rank seed: DDP ranks must
+        # are NOT excluded from the train pool. Pseudo-domains listed in
+        # train_pool_from_bank instead train on their bank train split (their
+        # cache blob is the carved-out subset). Per-rank seed: DDP ranks must
         # not consume identical batches.
+        train_pool = (set(bank.split_episode_ids(domain, "train"))
+                      if domain in pool_from_bank else None)
+        if is_main:
+            print(f"[loader] {domain}: train_pool={'full' if train_pool is None else len(train_pool)} "
+                  f"val_pool={len(val_ids)}", flush=True)
         loader_seed = 42 + 1000 * rank
-        train_iters[domain] = backend.domain_loader(root, task, episode_ids=None,
+        train_iters[domain] = backend.domain_loader(root, task, episode_ids=train_pool,
                                                     batch_size=batch_size, seed=loader_seed)
         val_iters[domain] = backend.domain_loader(root, task, episode_ids=val_ids,
                                                   batch_size=batch_size, seed=loader_seed)
@@ -279,11 +294,16 @@ def main() -> None:
 
     history = []
     rng_gen = torch.Generator().manual_seed(1000 * rank)
+    sample_w = torch.tensor([domain_weights.get(d, 1.0) for d in train_domains])
+    if is_main:
+        eff = {d: f"{sample_w[i].item() / sample_w.sum().item():.0%}"
+               for i, d in enumerate(train_domains)}
+        print(f"[sampling] effective domain shares: {eff}", flush=True)
     t0 = time.time()
     for step in range(1, total_steps + 1):
         for g in optimizer.param_groups:
             g["lr"] = lr_at(step)
-        domain = train_domains[int(torch.randint(len(train_domains), (1,), generator=rng_gen))]
+        domain = train_domains[int(torch.multinomial(sample_w, 1, generator=rng_gen))]
         obs, act = next(train_iters[domain])
 
         x = bank.sample(domain, k=evidence_k, generator=rng_gen).to("cuda:0")
@@ -390,7 +410,10 @@ def main() -> None:
                         tls.append(float(backend.val_loss(
                             {p: jnp.asarray(t) for p, t in assemble(backend.mapping, ab).items()},
                             jax.random.PRNGKey(1), vo, va)))
-                    vls[d.split("__")[0]] = sum(tls) / len(tls)
+                    # short name unless it collides (lighting_L3__deep would
+                    # otherwise overwrite lighting_L3's entry in the same dict)
+                    short = d.split("__")[0]
+                    vls[d if short in vls else short] = sum(tls) / len(tls)
             mean_v = sum(vls.values()) / len(vls)
             history.append({"step": step, "val": vls, "val_mean": mean_v})
             print(f"[val] step {step} mean={mean_v:.5f} " +

@@ -98,6 +98,12 @@ def main() -> None:
                         help="Multi-process data parallel (torchrun): one GPU per "
                              "process, meta-net grads averaged via NCCL all-reduce. "
                              "Effective batch = batch_size * world_size.")
+    parser.add_argument("--init-checkpoint", type=Path, default=None,
+                        help="Warm-start the meta-net from an e2e checkpoint's "
+                             "state_dict. Scales are also frozen from the checkpoint: "
+                             "recomputing them over a changed train-domain set would "
+                             "rescale every physical LoRA and perturb all converged "
+                             "domains.")
     args = parser.parse_args()
 
     cfg = yaml.safe_load(args.config.read_text())
@@ -136,6 +142,17 @@ def main() -> None:
     domain_targets, shapes, modules = load_direct_targets(oracle_paths, rows)
     from mlvla.meta.weights.normalization import compute_rms_scales, scales_to_dict
     scales = scales_to_dict(compute_rms_scales(domain_targets))
+    init_ck = None
+    if args.init_checkpoint is not None:
+        init_ck = torch.load(args.init_checkpoint, map_location="cpu", weights_only=False)
+        assert set(init_ck["scales"]) == set(scales), \
+            "init checkpoint scale key set does not match this config's module rows"
+        # The warm-started weights encode predictions in the checkpoint's scale
+        # parameterization (pred * scale -> physical LoRA); adopting freshly
+        # computed scales (whose RMS now includes the added train domain) would
+        # silently rescale the physical LoRA of every converged domain at step 0.
+        scales = init_ck["scales"]
+        print(f"warm-start: scales frozen from {args.init_checkpoint}", flush=True)
     del domain_targets  # targets only feed scale computation; e2e never regresses weights
     keys = sorted(scales)
     # cuda:0 everywhere (never bare "cuda"): with >1 JAX device, XLA's
@@ -179,6 +196,10 @@ def main() -> None:
     torch.manual_seed(0)
     model_args = model_args_for(args.variant, shapes, cfg["hypernet"])
     model = build_model(args.variant, shapes, cfg["hypernet"]).to("cuda:0")
+    if init_ck is not None:
+        model.load_state_dict(init_ck["state_dict"])
+        print(f"warm-start: loaded state_dict from {args.init_checkpoint} "
+              f"({len(init_ck['state_dict'])} tensors)", flush=True)
     if args.compile:
         print(f"Compiling meta-net with torch.compile(mode={args.compile_mode!r})...", flush=True)
         model = torch.compile(model, mode=args.compile_mode)
@@ -186,6 +207,10 @@ def main() -> None:
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
 
     def lr_at(step: int) -> float:
+        if tr.get("lr_constant"):
+            # Warm-start domain absorption: flat lr (optionally ramped over
+            # `warmup` steps) instead of the fresh-run warmup+cosine.
+            return lr * min(1.0, step / max(1, warmup))
         if step <= warmup:
             return lr * step / max(1, warmup)
         p = (step - warmup) / max(1, total_steps - warmup)

@@ -1,0 +1,42 @@
+rung: fullvw4
+# Fixlight: warm-start from e2e_concat_level_mt step12000.pt with lighting_L3
+# added as a 9th train domain (lighting_L3 moves from OOD to training column;
+# protocol-symmetric with its expert baseline, which trained on the same
+# dataset). camera/noise/texture L3 remain held-out OOD.
+# Launch with: train_e2e.py --init-checkpoint .../e2e_concat_level_mt/step12000.pt
+task_prompt: null
+feature_cache_dir: /home/zhy/vla/meta_lora/outputs/feature_cache_level
+train_domains:
+  - camera_L1
+  - camera_L2
+  - lighting_L1
+  - lighting_L2
+  - lighting_L3
+  - noise_L1
+  - noise_L2
+  - texture_L1
+  - texture_L2
+weight_target:
+  max_modules: 458
+  exclude_key_substrings: [lm_head]
+training:
+  # Warm-start absorption: flat lr 1.5e-4 (~0.18x fresh base 8.5e-4) after a
+  # 100-step ramp; 5k steps x uniform 1/9 domain sampling ~ 556 lighting_L3
+  # steps (~0.53 epoch of its 63k frames). 8-GPU DDP effective batch 64.
+  max_steps: 5000
+  batch_size: 8
+  lr: 1.5e-4
+  lr_constant: true
+  weight_decay: 0.01
+  warmup: 100
+  clip: 1.0
+  val_every: 500
+  save_every: 500
+  evidence_k: 8
+hypernet:            # V4DirectABHyperNetwork (same as e2e_concat_level_mt)
+  dino_dim: 1024
+  condition_hidden_dim: 256
+  hidden_dim: 512
+  id_dim: 256
+  trunk_layers: 6
+  trunk_hidden: 1024

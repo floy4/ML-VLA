@@ -37,6 +37,11 @@ VIEW_PARAMS: dict[str, list[float]] = {
     "texture_L1": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
     "texture_L2": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
     "texture_L3": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+    # add_object level domains (Qwen3.5-9B delta banding): no view change,
+    # identity like the other non-camera families.
+    "add_object_L1": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+    "add_object_L2": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+    "add_object_L3": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
 }
 VIEW_DIM = 7
 

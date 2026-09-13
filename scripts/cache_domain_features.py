@@ -15,30 +15,31 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 
-def reservoir_frames(parquet_path: Path, episodes: set[int], frames: int, seed: int):
+def reservoir_frames(parquet_paths: list[Path], episodes: set[int], frames: int, seed: int):
     import pyarrow.parquet as pq
 
     rng = random.Random(seed)
     reservoirs: dict[int, list[bytes]] = {}
     counts: dict[int, int] = {}
-    parquet = pq.ParquetFile(parquet_path)
     wanted = ["episode_index", "image"]
-    for batch in parquet.iter_batches(batch_size=256, columns=wanted):
-        for row in batch.to_pylist():
-            episode = int(row["episode_index"])
-            if episode not in episodes:
-                continue
-            raw = row["image"].get("bytes")
-            if not raw:
-                continue
-            counts[episode] = counts.get(episode, 0) + 1
-            bucket = reservoirs.setdefault(episode, [])
-            if len(bucket) < frames:
-                bucket.append(raw)
-            else:
-                replacement = rng.randrange(counts[episode])
-                if replacement < frames:
-                    bucket[replacement] = raw
+    for parquet_path in parquet_paths:
+        parquet = pq.ParquetFile(parquet_path)
+        for batch in parquet.iter_batches(batch_size=256, columns=wanted):
+            for row in batch.to_pylist():
+                episode = int(row["episode_index"])
+                if episode not in episodes:
+                    continue
+                raw = row["image"].get("bytes")
+                if not raw:
+                    continue
+                counts[episode] = counts.get(episode, 0) + 1
+                bucket = reservoirs.setdefault(episode, [])
+                if len(bucket) < frames:
+                    bucket.append(raw)
+                else:
+                    replacement = rng.randrange(counts[episode])
+                    if replacement < frames:
+                        bucket[replacement] = raw
     return [(episode, values) for episode, values in sorted(reservoirs.items()) if len(values) == frames]
 
 
@@ -77,8 +78,8 @@ def main() -> None:
     manifest = {"seed": args.seed, "frames": args.frames, "model": args.dinov3, "domains": {}}
 
     for domain_index, (domain_id, spec) in enumerate(sorted(domains.items())):
-        parquet = Path(spec["dataset_root"]) / "data" / "chunk-000" / "file-000.parquet"
-        samples = reservoir_frames(parquet, set(spec["episodes"]), args.frames, args.seed + domain_index)
+        parquets = sorted((Path(spec["dataset_root"]) / "data").glob("chunk-*/file-*.parquet"))
+        samples = reservoir_frames(parquets, set(spec["episodes"]), args.frames, args.seed + domain_index)
         if not samples:
             raise RuntimeError(f"{domain_id}: reservoir produced no complete episodes")
         frames_np = [np.asarray(Image.open(io.BytesIO(raw)).convert("RGB")) for _, values in samples for raw in values]

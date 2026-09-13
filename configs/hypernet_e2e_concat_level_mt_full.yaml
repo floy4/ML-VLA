@@ -1,0 +1,48 @@
+rung: fullvw4
+# Full-coverage universal-LoRA run: all 12 level domains (L1+L2+L3 — the L3
+# held-out OOD protocol is retired, see reports/2026-09-13-e2e-fixlight-*)
+# + 3 add_object bands (Qwen3.5-9B delta banding) + original-LIBERO clean
+# domain (libero_v2_download, v3.0 10fps). 16 train domains, uniform sampling.
+# Data: ~1.52M frames @10fps -> one epoch ~23.8k steps @ effective batch 64;
+# 60k steps ~ 2.5 epochs. lr 8.5e-4 (sqrt(8) batch scaling) warmup 1000 +
+# cosine (floor 0.1). save_every 10000 (disk: 6 ckpts ~ 16G).
+task_prompt: null
+feature_cache_dir: /home/zhy/vla/meta_lora/outputs/feature_cache_level
+train_domains:
+  - camera_L1
+  - camera_L2
+  - camera_L3
+  - lighting_L1
+  - lighting_L2
+  - lighting_L3
+  - noise_L1
+  - noise_L2
+  - noise_L3
+  - texture_L1
+  - texture_L2
+  - texture_L3
+  - add_object_L1
+  - add_object_L2
+  - add_object_L3
+  - clean
+weight_target:
+  max_modules: 458
+  exclude_key_substrings: [lm_head]
+training:
+  # 8-GPU DDP (torchrun --nproc_per_node=8): effective batch 8*8=64.
+  max_steps: 60000
+  batch_size: 8
+  lr: 8.5e-4
+  weight_decay: 0.01
+  warmup: 1000
+  clip: 1.0
+  val_every: 1000
+  save_every: 10000
+  evidence_k: 8
+hypernet:            # V4DirectABHyperNetwork (same as single-task concat)
+  dino_dim: 1024
+  condition_hidden_dim: 256
+  hidden_dim: 512
+  id_dim: 256
+  trunk_layers: 6
+  trunk_hidden: 1024

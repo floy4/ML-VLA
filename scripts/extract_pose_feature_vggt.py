@@ -70,11 +70,11 @@ def first_frames_from_parquet(dataset_root: Path, episode_ids: list[int]) -> dic
         parquet = pq.ParquetFile(parquet_path)
         columns = [c for c in ("episode_index", "frame_index", "image") if c in parquet.schema_arrow.names]
         if "episode_index" not in columns or "image" not in columns:
-            raise RuntimeError(f"unexpected parquet schema {parquet.schema_names} in {parquet_path}")
+            raise RuntimeError(f"unexpected parquet schema {parquet.schema_arrow.names} in {parquet_path}")
         for batch in parquet.iter_batches(batch_size=256, columns=columns):
             for row in batch.to_pylist():
                 episode = int(row["episode_index"])
-                if episode not in wanted or episode in found:
+                if episode not in wanted:
                     continue
                 raw = row["image"].get("bytes") if isinstance(row["image"], dict) else None
                 if not raw:

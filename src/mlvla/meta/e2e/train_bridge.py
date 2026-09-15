@@ -290,8 +290,12 @@ def main() -> None:
         from datetime import timedelta
         rank, world = int(os.environ["RANK"]), int(os.environ["WORLD_SIZE"])
         # Staggered heavy init (MLVLA_DDP_STAGGER_S below) delays later ranks'
-        # first collective past NCCL's default 10-min timeout; 60 min covers it.
-        dist.init_process_group("nccl", timeout=timedelta(minutes=60))
+        # first collective past NCCL's default 10-min timeout; 60 min covers the
+        # stagger when all ranks init at rank-0 pace, but host/IO contention
+        # (or another job sharing the GPUs) can slow later ranks' init ~3x —
+        # MLVLA_DDP_NCCL_TIMEOUT_MIN widens the budget for such launches.
+        _nccl_to = float(os.environ.get("MLVLA_DDP_NCCL_TIMEOUT_MIN", "60"))
+        dist.init_process_group("nccl", timeout=timedelta(minutes=_nccl_to))
         print(f"[ddp] world={world} rank={rank} effective_batch={batch_size * world}", flush=True)
         # One rank's startup (oracle-target staging, 3B-param model host load,
         # 16 eager dataset builds, XLA compile of the fused loss) transiently

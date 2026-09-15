@@ -22,14 +22,17 @@ import os
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 import argparse
+import json
 import math
 import time
 from pathlib import Path
 
 import jax
+import jax.dlpack
 import jax.numpy as jnp
 import numpy as np
 import torch
+import torch.utils.dlpack
 import yaml
 
 from mlvla.meta.e2e.lora_mapping import assemble, disassemble
@@ -83,6 +86,84 @@ def build_model(variant: str, module_shapes, hyper: dict) -> torch.nn.Module:
     raise ValueError(f"unknown variant {variant!r}")
 
 
+def _build_fast_path_perm(keys, sizes_a, sizes_b, shapes, mapping, jax_paths,
+                          jax_sizes, site_shapes):
+    """One-time permutation between the torch flat LoRA layout (all A then all
+    B, ``keys`` order) and the jax flat pack layout (``jax_paths`` order —
+    exactly what ``JAXBackend.grad_packed`` consumes).
+
+    Recovered by a sentinel pass through the REAL :func:`assemble` (never by
+    reimplementing its transposes/reshapes): module values carry global flat
+    indices (+1 offset), so the assembled tensors spell out where every
+    torch-flat element lands in the jax layout. float32 keeps integers exact
+    only below 2**24 and the flat layout is ~46M elements, so each index is
+    split across two passes (low 24 bits + high part). Two kinds of positions
+    hold constant zeros in the slow path and must NOT map into the torch flat
+    layout: untrained keys (e.g. lm_head under the v1-compat filter, sentinel
+    -1 -> perm entry -(2**24+1)) and slot positions no site ever writes
+    (assemble zero-initializes, and the +1 offset makes the untouched 0
+    distinguishable from real index 0) — both come out as perm entry -1.
+
+    Returns ``(perm_fwd, perm_bwd)`` int64 cpu arrays — ``perm_fwd[jax_pos] =
+    torch_pos`` (or -1 for constant-zero slots) and the inverse
+    ``perm_bwd[torch_pos] = jax_pos`` — or ``None`` if the trained entries do
+    not form a bijection (duplicate slot writes would need assemble's
+    last-write-wins / disassemble's grad-duplication semantics, which a
+    permutation cannot mirror; the caller then falls back to the slow path).
+    """
+    low_bits = 1 << 24
+    total_a = int(sum(sizes_a))
+    total = total_a + int(sum(sizes_b))
+    cum_a = np.concatenate([[0], np.cumsum(sizes_a)])
+    cum_b = np.concatenate([[0], np.cumsum(sizes_b)])
+
+    def sentinel_pass(transform):
+        mod = {}
+        for i, k in enumerate(keys):
+            ia = np.arange(cum_a[i] + 1, cum_a[i] + sizes_a[i] + 1, dtype=np.int64)
+            ib = np.arange(total_a + cum_b[i] + 1,
+                           total_a + cum_b[i] + sizes_b[i] + 1, dtype=np.int64)
+            mod[k] = {"A": transform(ia).reshape(shapes[k]["A"]).astype(np.float32),
+                      "B": transform(ib).reshape(shapes[k]["B"]).astype(np.float32)}
+        for k in mapping.keys:  # untrained keys: constant-zero slots
+            if k not in mod:
+                mod[k] = {f: np.full(site_shapes[k][f], -1.0, dtype=np.float32)
+                          for f in ("A", "B")}
+        return assemble(mapping, mod)
+
+    assembled_lo = sentinel_pass(lambda v: v % low_bits)
+    assembled_hi = sentinel_pass(lambda v: v // low_bits)
+    perm_fwd = np.empty(int(sum(jax_sizes)), dtype=np.int64)
+    off = 0
+    for p, sz in zip(jax_paths, jax_sizes):
+        entry = assembled_hi[p].ravel().astype(np.int64) * low_bits \
+            + assembled_lo[p].ravel().astype(np.int64)
+        perm_fwd[off:off + sz] = np.where(entry > 0, entry - 1, -1)
+        off += sz
+    valid = perm_fwd >= 0
+    if not np.array_equal(np.sort(perm_fwd[valid]), np.arange(total)):
+        return None
+    perm_bwd = np.empty(total, dtype=np.int64)
+    perm_bwd[perm_fwd[valid]] = np.flatnonzero(valid)
+    # Build-time self-check (CPU, ~seconds): random values through the real
+    # assemble() must equal the permutation gather exactly, so the fast path
+    # is bit-equal to the slow path's data movement by construction.
+    rng = np.random.default_rng(0)
+    rand_ab = {k: {f: rng.standard_normal(shapes[k][f], dtype=np.float32)
+                   for f in ("A", "B")} for k in keys}
+    rand_ab.update({k: {f: np.zeros(site_shapes[k][f], dtype=np.float32)
+                        for f in ("A", "B")}
+                    for k in mapping.keys if k not in rand_ab})
+    flat = np.concatenate([rand_ab[k]["A"].ravel() for k in keys]
+                          + [rand_ab[k]["B"].ravel() for k in keys])
+    packed = np.concatenate([np.asarray(assemble(mapping, rand_ab)[p]).ravel()
+                             for p in jax_paths])
+    padded = np.concatenate([flat, np.zeros(1, dtype=np.float32)])
+    if not np.array_equal(packed, padded[np.where(valid, perm_fwd, total)]):
+        return None
+    return perm_fwd, perm_bwd
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
@@ -90,6 +171,12 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)   # /data2/.../e2e_<variant>/
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--steps", type=int, default=None)
+    parser.add_argument("--max-steps-override", type=int, default=None,
+                        help="Benchmark-only cap on the number of training-loop "
+                             "iterations. total_steps (cosine anchor, warmup, "
+                             "val/save cadence) is untouched, so a capped run is a "
+                             "prefix of the full run. Also enables the per-step "
+                             "loss jsonl dump under --output (rank 0).")
     parser.add_argument("--compile", action="store_true", help="Enable torch.compile() for meta-net")
     parser.add_argument("--compile-mode", default="reduce-overhead",
                         choices=("default", "reduce-overhead", "max-autotune"),
@@ -115,6 +202,11 @@ def main() -> None:
     task = cfg.get("task_prompt")
     tr = cfg["training"]
     total_steps = args.steps or (500 if args.smoke else int(tr["max_steps"]))
+    # Benchmark-only loop cap (see --max-steps-override): every schedule-bearing
+    # quantity keeps using total_steps.
+    loop_steps = total_steps if args.max_steps_override is None \
+        else min(total_steps, int(args.max_steps_override))
+    bench = args.max_steps_override is not None
     batch_size, lr, wd = int(tr["batch_size"]), float(tr["lr"]), float(tr["weight_decay"])
     warmup, clip, val_every, save_every = (int(tr["warmup"]), float(tr["clip"]),
                                            int(tr["val_every"]), int(tr["save_every"]))
@@ -292,6 +384,42 @@ def main() -> None:
         gb = [t.view(*shapes[k]["B"]) for t, k in zip(flat_gb.to("cuda:0").split(sizes_b), keys)]
         return ga, gb
 
+    # ---- dlpack zero-copy fast path (opt-in via MLVLA_FAST_PATH=1; default
+    # OFF. A/B-verified bit-exact for 300/300 steps, but the speed gate missed:
+    # ~0.43 s/step saved = 14.6% at production autotune-on settings (2.96 ->
+    # 2.53 s/step) and 7.8% under the deterministic autotune-off protocol
+    # (4.97 -> 4.58) — under the 25% merge bar, so training arms keep the
+    # original path for comparability unless explicitly opted in. "0"/"false"/
+    # "off" -> the original per-tensor CPU round-trip path, kept verbatim
+    # for A/B equivalence runs and rollback) ----
+    # Slow path per step: 916-tensor cuda->cpu->numpy->jnp->(pack)->numpy->cuda.
+    # Fast path: one cuda gather into the jax pack layout + dlpack share, and the
+    # inverse gather back — pure data movement, bit-identical values.
+    fast_path = os.environ.get("MLVLA_FAST_PATH", "0").strip().lower() not in ("0", "false", "off")
+    perm_fwd_t = perm_bwd_t = zero_rows_t = None
+    total_a_flat = int(sum(sizes_a))
+    if fast_path:
+        built = _build_fast_path_perm(keys, sizes_a, sizes_b, shapes, backend.mapping,
+                                      backend.lora_paths, backend.lora_flat_sizes,
+                                      site_shapes)
+        if built is None:
+            print("[fast-path] flat permutation failed the bijection/self-check; "
+                  "falling back to the slow path", flush=True)
+            fast_path = False
+        else:
+            perm_fwd_np, perm_bwd_np = built
+            zero_rows_t = torch.from_numpy(perm_fwd_np < 0).to("cuda:0")
+            perm_fwd_t = torch.from_numpy(
+                np.where(perm_fwd_np >= 0, perm_fwd_np, 0).astype(np.int64)).to("cuda:0")
+            perm_bwd_t = torch.from_numpy(perm_bwd_np).to("cuda:0")
+            print(f"[fast-path] permutation built: {perm_fwd_t.numel()} jax-flat / "
+                  f"{perm_bwd_t.numel()} torch-flat elements "
+                  f"({int(zero_rows_t.sum())} constant-zero slots)", flush=True)
+    # Fused all-reduce bucket for the DDP branch (lazily sized at first use,
+    # when grads first exist; ~2.85GB f32 for the 713M-param V4 head).
+    ddp_bucket = None
+    ddp_layout = None
+
     history = []
     rng_gen = torch.Generator().manual_seed(1000 * rank)
     sample_w = torch.tensor([domain_weights.get(d, 1.0) for d in train_domains])
@@ -300,7 +428,11 @@ def main() -> None:
                for i, d in enumerate(train_domains)}
         print(f"[sampling] effective domain shares: {eff}", flush=True)
     t0 = time.time()
-    for step in range(1, total_steps + 1):
+    loss_log = None
+    if bench and is_main:
+        args.output.mkdir(parents=True, exist_ok=True)
+        loss_log = open(args.output / "per_step_loss.jsonl", "w")
+    for step in range(1, loop_steps + 1):
         for g in optimizer.param_groups:
             g["lr"] = lr_at(step)
         domain = train_domains[int(torch.multinomial(sample_w, 1, generator=rng_gen))]
@@ -326,17 +458,49 @@ def main() -> None:
         # elementwise-identical to the stacked formulation.
         a_phys = [pred[k]["A"].mean(0) * scale_a[i] for i, k in enumerate(keys)]
         b_phys = [pred[k]["B"].mean(0) * scale_b[i] for i, k in enumerate(keys)]
-        module_ab = lora_values(a_phys, b_phys)
-        tensors = {p: jnp.asarray(t) for p, t in assemble(backend.mapping, module_ab).items()}
         key = jax.random.fold_in(jax.random.PRNGKey(0), step)
-        loss, grads = backend.loss_and_grad(dict(tensors), key, obs, act)
-        loss = float(loss)
-        if not math.isfinite(loss):
-            raise RuntimeError(f"step {step}: non-finite loss")
-        gmod = disassemble(backend.mapping, {p: np.asarray(g) for p, g in grads.items()})
-        ga, gb = lora_grads(gmod)
+        if fast_path:
+            # Forward: flat torch layout (all A then all B, `keys` order) ->
+            # one cuda gather into the jax pack layout -> zero-copy dlpack
+            # share. Same jitted grad_packed executable and identical input
+            # values as the slow path (build-time self-checked), minus the 916
+            # per-tensor host round trips and loss_and_grad's in-jax _pack.
+            flat_ab = torch.cat([a.reshape(-1) for a in a_phys]
+                                + [b.reshape(-1) for b in b_phys]).detach()
+            flat_jax_t = flat_ab[perm_fwd_t]
+            flat_jax_t[zero_rows_t] = 0.0  # untrained slots: slow path's zeros
+            # torch (gather) and XLA may use different CUDA streams; make the
+            # gather visible before the jax kernel reads the shared buffer.
+            torch.cuda.synchronize()
+            loss, gflat = backend.grad_packed(
+                jax.dlpack.from_dlpack(flat_jax_t), key, obs, act)
+            loss = float(loss)
+            if not math.isfinite(loss):
+                raise RuntimeError(f"step {step}: non-finite loss")
+            # Backward: zero-copy back to torch, inverse gather into the torch
+            # flat layout, split into per-key canonical views (same
+            # shapes/split semantics as lora_grads on the slow path).
+            jax.block_until_ready(gflat)
+            gflat_torch = torch.utils.dlpack.from_dlpack(gflat)[perm_bwd_t]
+            ga = [t.view(*shapes[k]["A"])
+                  for t, k in zip(gflat_torch[:total_a_flat].split(sizes_a), keys)]
+            gb = [t.view(*shapes[k]["B"])
+                  for t, k in zip(gflat_torch[total_a_flat:].split(sizes_b), keys)]
+        else:
+            module_ab = lora_values(a_phys, b_phys)
+            tensors = {p: jnp.asarray(t) for p, t in assemble(backend.mapping, module_ab).items()}
+            loss, grads = backend.loss_and_grad(dict(tensors), key, obs, act)
+            loss = float(loss)
+            if not math.isfinite(loss):
+                raise RuntimeError(f"step {step}: non-finite loss")
+            gmod = disassemble(backend.mapping, {p: np.asarray(g) for p, g in grads.items()})
+            ga, gb = lora_grads(gmod)
         if not all(torch.isfinite(g).all() for g in ga + gb):
             raise RuntimeError(f"step {step}: non-finite lora grads")
+        if loss_log is not None:
+            loss_log.write(json.dumps(
+                {"step": step, "loss": loss, "t": round(time.time() - t0, 3)}) + "\n")
+            loss_log.flush()
 
         # chain: backprop through the scale multiply. JAX grads ga/gb are w.r.t.
         # the PHYSICAL values (a_phys = pred_mean * scale), so the true target
@@ -349,7 +513,32 @@ def main() -> None:
                     for i in range(len(keys)))
         optimizer.zero_grad(set_to_none=True)
         proxy.backward()
-        if args.ddp:
+        if args.ddp and fast_path:
+            # Fused all-reduce: assemble every grad into ONE pre-allocated flat
+            # bucket, a single dist.all_reduce, then scatter back. Per-element
+            # math identical to the per-parameter loop below (SUM then /world);
+            # one NCCL collective instead of one per parameter. The layout holds
+            # PARAMETER references and dereferences p.grad fresh each step:
+            # zero_grad(set_to_none=True) makes every backward allocate new
+            # grad tensors, so capturing p.grad itself at first use would read
+            # and write step-1's stale (orphaned) tensors from step 2 on.
+            with torch.no_grad():
+                if ddp_bucket is None:
+                    ddp_layout = [(p, p.grad.numel())
+                                  for p in model.parameters() if p.grad is not None]
+                    ddp_bucket = torch.zeros(sum(n for _, n in ddp_layout),
+                                             dtype=torch.float32, device="cuda:0")
+                pos = 0
+                for p, n in ddp_layout:
+                    ddp_bucket[pos:pos + n].copy_(p.grad.reshape(-1))
+                    pos += n
+                dist.all_reduce(ddp_bucket, op=dist.ReduceOp.SUM)
+                ddp_bucket /= world
+                pos = 0
+                for p, n in ddp_layout:
+                    p.grad.copy_(ddp_bucket[pos:pos + n].view_as(p.grad))
+                    pos += n
+        elif args.ddp:
             # Average grads across ranks BEFORE clipping so every rank clips
             # and steps identically (bit-exact weights thereafter).
             with torch.no_grad():
@@ -437,8 +626,11 @@ def main() -> None:
             print(f"saved {ckpt}", flush=True)
 
     if is_main:
-        print(f"done in {(time.time()-t0)/3600:.2f}h; history tail: "
+        print(f"done in {(time.time()-t0)/3600:.2f}h "
+              f"({(time.time()-t0)/max(1, loop_steps):.3f}s/it); history tail: "
               f"{history[-1] if history else None}")
+        if loss_log is not None:
+            loss_log.close()
     if args.ddp:
         dist.destroy_process_group()
 

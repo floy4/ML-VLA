@@ -40,13 +40,16 @@ from mlvla.meta.e2e.lora_mapping import assemble, disassemble
 VIEW_DIM = 7
 
 
-def model_args_for(variant: str, module_shapes, hyper: dict) -> dict:
+def model_args_for(variant: str, module_shapes, hyper: dict,
+                   pose_dim: int = VIEW_DIM) -> dict:
     """Constructor kwargs such that ``Cls(**model_args)`` reconstructs exactly.
 
     film/film_dropout add ``view_dim`` (absent from the yaml hypernet section);
-    concat derives ``condition_dim = dino_dim + 7`` (V4 takes condition_dim,
-    not dino_dim). Keys outside the target constructor's signature are dropped
-    so no extra kwarg ever leaks into the checkpoint.
+    concat derives ``condition_dim = dino_dim + pose_dim`` (V4 takes
+    condition_dim, not dino_dim). ``pose_dim`` comes from the config's
+    pose_feature scheme (view7/zero: 7 = legacy width; vggt/raymap: 2048) and
+    defaults to the legacy 7. Keys outside the target constructor's signature
+    are dropped so no extra kwarg ever leaks into the checkpoint.
     """
     if variant in ("film", "film_dropout"):
         return {
@@ -60,7 +63,7 @@ def model_args_for(variant: str, module_shapes, hyper: dict) -> dict:
         }
     if variant == "concat":
         return {
-            "condition_dim": int(hyper["dino_dim"]) + VIEW_DIM,
+            "condition_dim": int(hyper["dino_dim"]) + pose_dim,
             "module_shapes": module_shapes,
             "condition_hidden_dim": int(hyper["condition_hidden_dim"]),
             "hidden_dim": int(hyper["hidden_dim"]),
@@ -71,14 +74,15 @@ def model_args_for(variant: str, module_shapes, hyper: dict) -> dict:
     raise ValueError(f"unknown variant {variant!r}")
 
 
-def build_model(variant: str, module_shapes, hyper: dict) -> torch.nn.Module:
+def build_model(variant: str, module_shapes, hyper: dict,
+                pose_dim: int = VIEW_DIM) -> torch.nn.Module:
     """film/film_dropout -> SharedFiLM; concat -> V4 direct head.
 
     Constructs from :func:`model_args_for` — the same parameterization that is
     saved into checkpoints, so saving and building can never drift apart.
     """
     from mlvla.meta.hypernet import SharedFiLMABHyperNetwork, V4DirectABHyperNetwork
-    args = model_args_for(variant, module_shapes, hyper)
+    args = model_args_for(variant, module_shapes, hyper, pose_dim=pose_dim)
     if variant in ("film", "film_dropout"):
         return SharedFiLMABHyperNetwork(**args)
     if variant == "concat":
@@ -212,6 +216,20 @@ def main() -> None:
                                            int(tr["val_every"]), int(tr["save_every"]))
     view_dropout = 0.3 if args.variant == "film_dropout" else 0.0
     evidence_k = int(tr.get("evidence_k", 8))
+    # pose_feature scheme: {scheme: view7|zero|vggt|raymap, cache: <npz>, layer: int}
+    # (absent -> legacy view7, cond width 1024+7). Drives both the bank's
+    # view() vectors and the concat condition_dim below; recorded into every
+    # checkpoint so export/eval rebuild the identical cond input.
+    pose_cfg = cfg.get("pose_feature")
+    if pose_cfg is not None:
+        from mlvla.meta.view_params import pose_dim_for_scheme
+        pose_dim = pose_dim_for_scheme(pose_cfg.get("scheme", "view7"))
+        if args.variant != "concat" and pose_dim != VIEW_DIM:
+            raise SystemExit(
+                f"pose_feature scheme {pose_cfg.get('scheme')!r} (pose_dim={pose_dim}) "
+                f"is only wired for the concat variant, not {args.variant!r}")
+    else:
+        pose_dim = VIEW_DIM
     # Optional per-domain sampling weights (default 1.0) and pseudo-domains
     # (carved out of a parent dataset, e.g. lighting_L3__deep) whose TRAIN pool
     # is the bank's train split for that domain key instead of the full dataset.
@@ -290,12 +308,16 @@ def main() -> None:
     # ---- evidence ----
     from mlvla.meta.e2e.evidence import EvidenceBank
     feature_dir = Path(cfg["feature_cache_dir"])
-    bank = EvidenceBank(feature_dir, train_domains)
+    bank = EvidenceBank(feature_dir, train_domains, pose_feature=pose_cfg)
+    if is_main:
+        print(f"[pose] scheme={pose_cfg.get('scheme') if pose_cfg else 'view7'} "
+              f"pose_dim={pose_dim} "
+              f"cache={pose_cfg.get('cache') if pose_cfg else None}", flush=True)
 
     # ---- torch meta-net ----
     torch.manual_seed(0)
-    model_args = model_args_for(args.variant, shapes, cfg["hypernet"])
-    model = build_model(args.variant, shapes, cfg["hypernet"]).to("cuda:0")
+    model_args = model_args_for(args.variant, shapes, cfg["hypernet"], pose_dim=pose_dim)
+    model = build_model(args.variant, shapes, cfg["hypernet"], pose_dim=pose_dim).to("cuda:0")
     if init_ck is not None:
         model.load_state_dict(init_ck["state_dict"])
         print(f"warm-start: loaded state_dict from {args.init_checkpoint} "
@@ -446,8 +468,9 @@ def main() -> None:
 
         model.train()
         if args.variant == "concat":
-            # view vector broadcast onto each of the 4 frames (same semantics
-            # as view_params.append_view_params) -> [k,4,dino+7]; V4 frame-means.
+            # pose vector (scheme-aware via bank.view, [pose_dim]) broadcast
+            # onto each of the 4 frames (same semantics as
+            # view_params.append_view_params) -> [k,4,dino+pose_dim]; V4 frame-means.
             cond = torch.cat([x, v.unsqueeze(1).expand(-1, x.shape[1], -1)], dim=-1)
             pred = model(cond)
         else:
@@ -619,6 +642,7 @@ def main() -> None:
                 "view_dropout": view_dropout,
                 "state_dict": model.state_dict(),
                 "model_args": model_args,
+                "pose_feature": pose_cfg,
                 "scales": scales, "modules": modules, "history": history,
                 "oracle_paths": {d: str(p) for d, p in oracle_paths.items()},
                 "domains": train_domains, "pooling": "patch", "variant": args.variant,

@@ -35,7 +35,8 @@ def main() -> None:
     import torch
     import yaml
     from mlvla.meta.hypernet import DirectABHyperNetwork
-    from mlvla.meta.view_params import append_view_params, view_vector_for_domain
+    from mlvla.meta.view_params import (append_view_params, pose_dim_for_scheme,
+                                        pose_vector_from_config)
     from mlvla.meta.weights.lora_io import load_canonical, save_canonical
 
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
@@ -62,12 +63,33 @@ def main() -> None:
     model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
+    # pose scheme comes from the checkpoint (recorded by train_bridge from the
+    # training config): export MUST condition on the same pose vector type the
+    # model was trained with — a mismatch here silently corrupts closed-loop
+    # eval. Absent key (pre-scheme checkpoints) -> legacy view7.
+    pose_cfg = checkpoint.get("pose_feature")
+    pose_scheme = pose_cfg.get("scheme", "view7") if pose_cfg else "view7"
+    pose_dim = pose_dim_for_scheme(pose_scheme)
+    if checkpoint.get("evidence") == "dino_view_v4":
+        cond_dim = checkpoint["model_args"].get("condition_dim")
+        assert cond_dim is None or int(cond_dim) == 1024 + pose_dim, (
+            f"checkpoint condition_dim={cond_dim} does not match pose scheme "
+            f"{pose_scheme!r} (1024 + {pose_dim}); wrong npz/pose wiring?")
 
     for domain in eval_domains:
         template_path = domains[domain]["canonical_npz"]
         blob = torch.load(args.features / f"{domain}_{split}.pt", map_location="cpu")
         evidence = blob[key].to(device)
         n = evidence.shape[0]
+        # Export-time pose assertion: the per-condition conditioning vector must
+        # exist and be finite under the checkpoint's scheme before any LoRA is
+        # written; scheme + norm are printed for every condition.
+        pose_vec = pose_vector_from_config(domain, pose_cfg)
+        assert pose_vec.shape == (pose_dim,) and torch.isfinite(pose_vec).all(), \
+            f"pose vector for {domain!r} under scheme {pose_scheme!r} is not " \
+            f"finite [{pose_dim}]"
+        print(f"[pose] {domain}: scheme={pose_scheme} dim={pose_dim} "
+              f"norm={float(pose_vec.norm()):.4f}")
         # Chunked forward with a running sum: each episode's predicted LoRA set
         # is ~46M floats (~184MB fp32); level-domain eval pools reach hundreds
         # of episodes, and one full-batch forward (or materializing all
@@ -78,11 +100,11 @@ def main() -> None:
             for s in range(0, n, 32):
                 e = evidence[s:s + 32]
                 if checkpoint.get("evidence") in ("dino_film", "dino_film_shared"):
-                    view = torch.tensor(view_vector_for_domain(domain), device=device).expand(e.shape[0], -1)
+                    view = pose_vector_from_config(domain, pose_cfg).to(device).expand(e.shape[0], -1)
                     p = model(e, view)
                 else:
                     if checkpoint.get("evidence") in ("dino_view", "dino_view_v4"):
-                        e = append_view_params(e, domain)
+                        e = append_view_params(e, domain, pose_cfg)
                     p = model(e)
                 for k, ab in p.items():
                     if k not in sum_a:

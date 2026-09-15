@@ -54,12 +54,15 @@ def main() -> None:
     scales = scales_to_dict(compute_rms_scales(domain_targets))
 
     key = "features" if args.pooling == "patch" else "cls"
+    # Optional pose_feature block (same scheme as e2e); absent -> legacy view7
+    # and condition_dim stays data-derived (1024+7).
+    pose_cfg = config.get("pose_feature")
 
     def load_split(split):
         xs, ys = [], []
         for index, domain in enumerate(train_domains):
             blob = torch.load(args.features / f"{domain}_{split}.pt", map_location="cpu")
-            xs.append(append_view_params(blob[key], domain))
+            xs.append(append_view_params(blob[key], domain, pose_cfg))
             ys.extend([index] * blob[key].shape[0])
         return torch.cat(xs), torch.tensor(ys)
 
@@ -144,7 +147,8 @@ def main() -> None:
     torch.save({
         "representation": "direct_ab", "source": "dino_view", "evidence": "dino_view",
         "state_dict": model.state_dict(),
-        "model_args": model_args, "scales": scales, "modules": modules, "history": history,
+        "model_args": model_args, "pose_feature": pose_cfg,
+        "scales": scales, "modules": modules, "history": history,
         "oracle_paths": {d: str(p) for d, p in oracle_paths.items()}, "domains": train_domains,
         "feature_root": str(args.features), "pooling": args.pooling,
         "decoder_frozen": False, "rung": args.rung,

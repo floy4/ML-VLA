@@ -51,7 +51,7 @@ def main() -> None:
     import yaml
     from mlvla.meta.hypernet import DirectABHyperNetwork
     from mlvla.meta.hypernet.evaluation import evaluate_direct_ab
-    from mlvla.meta.view_params import append_view_params, view_vector_for_domain
+    from mlvla.meta.view_params import append_view_params, pose_vector_from_config
     from mlvla.meta.weights.targets import load_direct_targets, selected_rows
 
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
@@ -87,6 +87,9 @@ def main() -> None:
     }
     key = args.pooling or checkpoint.get("pooling", "patch")
     key = "features" if key == "patch" else "cls"
+    # pose scheme recorded by train_bridge; absent (pre-scheme checkpoints) ->
+    # legacy view7. Eval must condition on the same pose type as training.
+    pose_cfg = checkpoint.get("pose_feature")
 
     per_domain, all_pred, all_names = {}, [], []
     with torch.inference_mode():
@@ -95,11 +98,11 @@ def main() -> None:
                               map_location="cpu")
             evidence = blob[key].to(device)
             if checkpoint.get("evidence") in ("dino_film", "dino_film_shared"):
-                view = torch.tensor(view_vector_for_domain(domain), device=device).expand(evidence.shape[0], -1)
+                view = pose_vector_from_config(domain, pose_cfg).to(device).expand(evidence.shape[0], -1)
                 prediction = model(evidence, view)
             else:
                 if checkpoint.get("evidence") in ("dino_view", "dino_view_v4"):
-                    evidence = append_view_params(evidence, domain)
+                    evidence = append_view_params(evidence, domain, pose_cfg)
                 prediction = model(evidence)
             mean_prediction = {k: {f: t.mean(dim=0, keepdim=True) for f, t in factors.items()}
                                for k, factors in prediction.items()}

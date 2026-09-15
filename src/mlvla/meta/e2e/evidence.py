@@ -6,14 +6,18 @@ from pathlib import Path
 
 import torch
 
-from mlvla.meta.view_params import view_vector_for_domain
+from mlvla.meta.view_params import pose_vector_from_config, view_vector_for_domain
 
 
 class EvidenceBank:
-    def __init__(self, feature_dir: Path, domains: list[str], pooling: str = "patch") -> None:
+    def __init__(self, feature_dir: Path, domains: list[str], pooling: str = "patch",
+                 pose_feature: dict | None = None) -> None:
         self.feature_dir = Path(feature_dir)
         self.domains = list(domains)
         self.key = "features" if pooling == "patch" else "cls"
+        # Optional pose_feature config block {scheme, cache, layer}: when absent,
+        # view() keeps the legacy view_vector_for_domain path bit-identical.
+        self.pose_feature = dict(pose_feature) if pose_feature else None
         self._blobs = {
             (domain, split): torch.load(self.feature_dir / f"{domain}_{split}.pt",
                                         map_location="cpu")
@@ -34,6 +38,13 @@ class EvidenceBank:
         return [int(i) for i in self._blobs[(domain, split)]["episode_ids"].tolist()]
 
     def view(self, domain: str) -> torch.Tensor:
+        """[pose_dim] float32 pose vector for the domain, dispatched by config.
+
+        No pose_feature block -> legacy view7 (bit-identical regression path);
+        with one -> the scheme's vector (view7/zero: 7, vggt/raymap: 2048).
+        """
+        if self.pose_feature:
+            return pose_vector_from_config(domain, self.pose_feature)
         try:
             vec = view_vector_for_domain(domain)
         except ValueError:

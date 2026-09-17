@@ -578,10 +578,23 @@ def main() -> None:
         if args.ddp and step == 1:
             # One-shot sync check: identical inits + averaged grads + identical
             # optimizer math must give bit-identical params on every rank.
-            local = torch.cat([p.detach().reshape(-1) for p in model.parameters()])
-            dist.broadcast(local, src=0)
-            assert torch.equal(local, torch.cat([p.detach().reshape(-1)
-                                                 for p in model.parameters()])), "DDP rank divergence"
+            # Chunked broadcast/compare: the full-model cat + broadcast needed
+            # ~680MB of transient GPU memory and OOMs next to the fast path's
+            # flat buffers (44GB GPUs run ~300MB free after init) — verified
+            # empirically: all 8 ranks passed the fused all_reduce, then died
+            # in this diagnostic (ab_ddp_check3, 2026-09-17).
+            with torch.no_grad():
+                _chunk = 8 * 1024 * 1024
+                _buf = torch.empty(_chunk, dtype=torch.float32, device="cuda:0")
+                for _p in model.parameters():
+                    _flat = _p.detach().reshape(-1)
+                    for _s in range(0, _flat.numel(), _chunk):
+                        _e = min(_s + _chunk, _flat.numel())
+                        _view = _buf[: _e - _s]
+                        _view.copy_(_flat[_s:_e])
+                        dist.broadcast(_view, src=0)
+                        if not torch.equal(_view, _flat[_s:_e]):
+                            raise RuntimeError("DDP rank divergence")
 
         if is_main and (step == 1 or step % 50 == 0):
             norms_a = (sum(a.detach().norm() for a in a_phys) / len(keys)).item()

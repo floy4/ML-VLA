@@ -1,0 +1,38 @@
+rung: fullvw4
+# Resume from step12000.pt (original 8-domain L1+L2 run), continue to 30k steps.
+# Purpose: observe whether 12-domain mean continues to improve beyond 60.8%,
+# and verify that universal-LoRA collapse persists (cross-domain rel-L2 ~0.0005).
+task_prompt: null
+feature_cache_dir: /home/zhy/vla/meta_lora/outputs/feature_cache_level
+train_domains:
+  - camera_L1
+  - camera_L2
+  - lighting_L1
+  - lighting_L2
+  - noise_L1
+  - noise_L2
+  - texture_L1
+  - texture_L2
+weight_target:
+  max_modules: 458
+  exclude_key_substrings: [lm_head]
+training:
+  # Resume from step 12000, continue to 30000 (18k more steps).
+  # 8-GPU DDP: effective batch 8*8=64. lr = 8.5e-4 (same as original).
+  # warmup 500 steps (from resume point) + cosine (floor 0.1).
+  max_steps: 30000
+  batch_size: 8
+  lr: 8.5e-4
+  weight_decay: 0.01
+  warmup: 500
+  clip: 1.0
+  val_every: 1000
+  save_every: 2000
+  evidence_k: 8
+hypernet:            # V4DirectABHyperNetwork (same as single-task concat)
+  dino_dim: 1024
+  condition_hidden_dim: 256
+  hidden_dim: 512
+  id_dim: 256
+  trunk_layers: 6
+  trunk_hidden: 1024

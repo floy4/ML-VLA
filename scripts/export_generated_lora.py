@@ -57,6 +57,14 @@ def main() -> None:
     elif checkpoint.get("evidence") == "dino_view_v4":
         from mlvla.meta.hypernet import V4DirectABHyperNetwork
         model = V4DirectABHyperNetwork(**checkpoint["model_args"])
+    elif checkpoint.get("evidence") == "dino_pose_t2l":
+        from mlvla.meta.t2l_style import T2LStyleHyperNet, TwoBranchConditionEncoder
+        from mlvla.meta.e2e.train_bridge import T2LWrapper
+        t2l_args = checkpoint["model_args"]
+        cond_encoder = TwoBranchConditionEncoder(**t2l_args["condition_encoder_args"])
+        hypernet = T2LStyleHyperNet(**t2l_args["hypernet_args"])
+        module_to_group = t2l_args["module_to_group"]
+        model = T2LWrapper(cond_encoder, hypernet, module_to_group)
     else:
         model = DirectABHyperNetwork(**checkpoint["model_args"])
     model.load_state_dict(checkpoint["state_dict"])
@@ -99,7 +107,7 @@ def main() -> None:
         with torch.inference_mode():
             for s in range(0, n, 32):
                 e = evidence[s:s + 32]
-                if checkpoint.get("evidence") in ("dino_film", "dino_film_shared"):
+                if checkpoint.get("evidence") in ("dino_film", "dino_film_shared", "dino_pose_t2l"):
                     view = pose_vector_from_config(domain, pose_cfg).to(device).expand(e.shape[0], -1)
                     p = model(e, view)
                 else:
@@ -138,6 +146,7 @@ def main() -> None:
                 "dino_film": "FiLMABHyperNetwork",
                 "dino_film_shared": "SharedFiLMABHyperNetwork",
                 "dino_view_v4": "V4DirectABHyperNetwork",
+                "dino_pose_t2l": "T2LStyleHyperNet+TwoBranchConditionEncoder",
             }.get(checkpoint.get("evidence"), "DirectABHyperNetwork"),
             "conditioning": checkpoint["source"],
             "domain": domain,

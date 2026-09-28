@@ -137,7 +137,7 @@ class T2LStyleHyperNet(nn.Module):
             nn.Dropout(dropout),
         )
 
-        # Residual trunk
+        # Residual trunk (mlp1 + mlp2, shared by both paths)
         self.mlp1 = MLPResidualBlock(
             mlp_inp_size,
             mlp_inp_size * 4,
@@ -165,20 +165,21 @@ class T2LStyleHyperNet(nn.Module):
 
         # Output heads
         if shared_AB_head:
-            # Per-module learned embeddings for shared head
+            # Per-group learned embeddings for A/B distinction.
+            # Added at the trunk level (mlp_inp_size) after mlp2, before mlp3.
+            # Zero-initialized so training starts close to the shared baseline.
             self.out_emb = nn.ParameterDict(
                 (
                     m,
                     nn.ParameterDict(
                         dict(
-                            A=nn.Parameter(torch.normal(0, 1, size=(mlp_inp_size,))),
-                            B=nn.Parameter(torch.normal(0, 1, size=(mlp_inp_size,))),
+                            A=nn.Parameter(torch.zeros(mlp_inp_size)),
+                            B=nn.Parameter(torch.zeros(mlp_inp_size)),
                         )
                     ),
                 )
                 for m in self.target_modules
             )
-            self.out_emb_norm = nn.LayerNorm(mlp_inp_size)
 
         # Create heads
         heads = []
@@ -245,31 +246,35 @@ class T2LStyleHyperNet(nn.Module):
         cat_emb = torch.cat([encoded_task_emb, depth_emb, type_emb], dim=-1)
         mlp_inp = self.mixer(cat_emb)
 
-        # Residual trunk
+        # Residual trunk — mlp1 only; mlp2 is applied per-path below so the
+        # shared head can inject out_emb between mlp1 and mlp2 without the
+        # trunk's mlp2 call double-processing the signal.
         mlp_out = self.mlp1(mlp_inp)
-        mlp_out = self.mlp2(mlp_out)
 
         # Get head
         head = self.heads[layer_type]
 
         if not self.shared_AB_head:
-            # Head outputs both A and B
-            head_out = head(self.mlp3(mlp_out))
+            # Non-shared: mlp2 then mlp3 then head
+            head_out = head(self.mlp3(self.mlp2(mlp_out)))
             A_flat, B_flat = torch.split(head_out, self.split_shapes[layer_type], dim=-1)
 
             # Reshape to matrix form
             A = A_flat.reshape(bs, self.lora_rank, self.in_features[layer_type])
             B = B_flat.reshape(bs, self.lora_rank, self.out_features[layer_type]).transpose(-1, -2)
         else:
-            # Shared head with per-module embeddings
+            # Shared head with per-group A/B embeddings.
+            # out_emb is added at the trunk level (after mlp1, before mlp2)
+            # so A and B see different signals through the remaining layers.
+            # out_emb is zero-initialized so training starts from the shared baseline.
             splitted_out = []
             for out_emb_key, num_features in zip(
                 ["A", "B"],
                 [self.in_features[layer_type], self.out_features[layer_type]],
             ):
                 out_emb = self.out_emb[layer_type][out_emb_key]
-                head_in = self.mlp2(mlp_out + self.out_emb_norm(out_emb))
-                head_out = head(self.mlp3(head_in))
+                head_in = self.mlp3(self.mlp2(mlp_out + out_emb))
+                head_out = head(head_in)
                 head_out = head_out.view(bs, self.lora_rank, -1)
                 head_out = head_out[..., :num_features]
                 head_out = head_out.reshape(bs, self.lora_rank * num_features)

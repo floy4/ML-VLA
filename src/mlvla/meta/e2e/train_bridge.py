@@ -40,65 +40,118 @@ from mlvla.meta.e2e.lora_mapping import assemble, disassemble
 VIEW_DIM = 7
 
 
+def extract_layer_index(key: str) -> int:
+    """Extract layer number from a module key like '...layers.15.mlp.gate_proj'.
+
+    Returns 0 for keys that don't contain a 'layers.N' pattern.
+    """
+    import re
+    match = re.search(r'layers\.(\d+)', key)
+    return int(match.group(1)) if match else 0
+
+
+def group_module_shapes(shapes: dict) -> tuple[dict, dict]:
+    """Group 456 modules by (A_shape, B_shape) into ~17 shape groups.
+
+    T2L's parameter savings come from sharing one head per shape group and
+    using layer depth embedding to distinguish layers within a group. Without
+    grouping, each of the 456 modules gets its own head (no savings), the type
+    embedding degenerates to a 456-way one-hot, and the module keys (which
+    contain '.') crash nn.ModuleDict.
+
+    Args:
+        shapes: Dict mapping full_key -> {"A": (r, in), "B": (out, r)},
+                where full_key contains dots (e.g. 'model.layers.15.mlp.gate_proj').
+
+    Returns:
+        group_shapes: Dict mapping clean group_key -> {"A": ..., "B": ...},
+                      e.g. {"A16x512_B512x16": {"A": (16, 512), "B": (512, 16)}}.
+                      These keys contain no dots, safe for nn.ModuleDict.
+        module_to_group: Dict mapping full_key -> (group_key, layer_index).
+    """
+    group_shapes = {}
+    module_to_group = {}
+    for full_key, ab in shapes.items():
+        a_shape = ab["A"]  # (r, in_features)
+        b_shape = ab["B"]  # (out_features, r)
+        group_key = f"A{a_shape[0]}x{a_shape[1]}_B{b_shape[0]}x{b_shape[1]}"
+        if group_key not in group_shapes:
+            group_shapes[group_key] = ab
+        layer_index = extract_layer_index(full_key)
+        module_to_group[full_key] = (group_key, layer_index)
+    return group_shapes, module_to_group
+
+
 class T2LWrapper(torch.nn.Module):
     """Wrapper combining TwoBranchConditionEncoder + T2LStyleHyperNet.
 
     Provides a unified interface compatible with train_bridge's training loop.
-    Forward pass: evidence -> condition encoder -> task embedding -> hypernet -> LoRA predictions.
+    Forward pass: evidence -> condition encoder -> task embedding -> hypernet ->
+    per-group LoRA generation -> scatter to 456 individual module keys.
 
-    The wrapper handles the layer_indices logic: for each module type, generates
-    predictions for all its layers (up to max_layers), then the caller averages
-    over evidence dimension as usual.
+    The wrapper uses REAL layer indices (extracted from module key paths like
+    'layers.15.mlp.gate_proj' -> 15), not virtual 0..max_layers, so the depth
+    embedding actually distinguishes layer positions. Each module gets its own
+    layer-specific prediction; no averaging over layers.
     """
 
-    def __init__(self, condition_encoder, hypernet):
+    def __init__(self, condition_encoder, hypernet, module_to_group: dict):
         super().__init__()
         self.condition_encoder = condition_encoder
         self.hypernet = hypernet
-        # Pre-compute layer indices for each module type
-        # In practice, we'll use the actual layer count per module type
-        self._layer_indices_cache = {}
+        # module_to_group: {full_key: (group_key, layer_index)}
+        self.module_to_group = module_to_group
+
+        # Invert: {group_key: [(full_key, layer_index), ...]}
+        from collections import defaultdict
+        self.group_to_modules = defaultdict(list)
+        for full_key, (group_key, layer_index) in module_to_group.items():
+            self.group_to_modules[group_key].append((full_key, layer_index))
+        # Sort each group by layer_index for deterministic ordering
+        for gk in self.group_to_modules:
+            self.group_to_modules[gk].sort(key=lambda x: x[1])
 
     def forward(self, semantic, geometric):
         """
         Args:
-            semantic: [B, K, 4, dino_dim] or [B, K, dino_dim] DINO features
-            geometric: [B, K, pose_dim] pose vectors
+            semantic: [B, ...] DINO features (passed through to condition_encoder)
+            geometric: [B, ...] pose vectors (passed through to condition_encoder)
 
         Returns:
-            Dict mapping module_key -> {"A": [B, r, in], "B": [B, out, r]}
-            Averaged over layers for each module type.
+            Dict mapping each of the 456 full module keys ->
+                   {"A": [B, r, in], "B": [B, out, r]}
+            Each module gets its own layer-specific prediction (no averaging).
         """
         # Encode condition
         task_emb = self.condition_encoder(semantic, geometric)  # [B, task_emb_size]
-
-        # Generate LoRA for each module type
-        output = {}
         bs = task_emb.shape[0]
 
-        for module_key in self.hypernet.target_modules:
-            # Get actual layer count for this module type
-            # For now, use max_layers (will be refined based on actual module shapes)
-            n_layers = self.hypernet.max_layers
-            layer_indices = torch.arange(n_layers, device=task_emb.device)
+        output = {}
+        for group_key, module_entries in self.group_to_modules.items():
+            # Real layer indices for modules in this group
+            layer_indices = torch.tensor(
+                [li for _, li in module_entries],
+                device=task_emb.device,
+            )
+            n_layers = len(layer_indices)
 
-            # Expand task_emb for all layers
+            # Expand task_emb for all layers in this group
+            # [B, task_emb_size] -> [B, n_layers, task_emb_size] -> [B*n_layers, task_emb_size]
             task_emb_expanded = task_emb.unsqueeze(1).expand(bs, n_layers, -1)
             task_emb_flat = task_emb_expanded.reshape(bs * n_layers, -1)
             layer_indices_expanded = layer_indices.unsqueeze(0).expand(bs, -1).reshape(-1)
 
-            # Generate LoRA
-            A, B = self.hypernet(task_emb_flat, layer_indices_expanded, module_key)
+            # Generate LoRA for this group: one prediction per (sample, layer) pair
+            A, B = self.hypernet(task_emb_flat, layer_indices_expanded, group_key)
+            # A: [B*n_layers, r, in], B: [B*n_layers, out, r]
 
-            # Reshape back: [B*n_layers, r, in] -> [B, n_layers, r, in]
+            # Reshape: [B*n_layers, ...] -> [B, n_layers, ...]
             A = A.reshape(bs, n_layers, *A.shape[1:])
             B = B.reshape(bs, n_layers, *B.shape[1:])
 
-            # Average over layers to get one prediction per sample
-            A = A.mean(dim=1)  # [B, r, in]
-            B = B.mean(dim=1)  # [B, out, r]
-
-            output[module_key] = {"A": A, "B": B}
+            # Scatter: each module gets its own layer-specific prediction
+            for i, (full_key, _) in enumerate(module_entries):
+                output[full_key] = {"A": A[:, i], "B": B[:, i]}
 
         return output
 
@@ -135,9 +188,11 @@ def model_args_for(variant: str, module_shapes, hyper: dict,
             "trunk_hidden": int(hyper.get("trunk_hidden", 1024)),
         }
     if variant == "t2l":
-        # T2L uses two-branch conditioning: semantic (DINO) + geometric (pose)
-        # Parse max_layers from module_shapes (max number of layers across all types)
-        # For simplicity, use a fixed value or derive from config
+        # T2L groups 456 modules by (A_shape, B_shape) into ~17 shape groups,
+        # sharing one head per group and using depth embedding to distinguish
+        # layers within a group. module_to_group maps each full module key to
+        # (group_key, real_layer_index).
+        grouped_shapes, module_to_group = group_module_shapes(module_shapes)
         max_layers = int(hyper.get("max_layers", 27))  # Default to 27 (actual max)
 
         # Condition encoder args
@@ -150,9 +205,9 @@ def model_args_for(variant: str, module_shapes, hyper: dict,
             "dropout": float(hyper.get("dropout", 0.05)),
         }
 
-        # Hypernet args
+        # Hypernet args — uses grouped shapes (~17 groups), not 456 full keys
         hypernet_args = {
-            "module_shapes": module_shapes,
+            "module_shapes": grouped_shapes,
             "max_layers": max_layers,
             "task_emb_size": int(hyper.get("task_emb_size", 256)),
             "depth_emb_size": int(hyper.get("depth_emb_size", 64)),
@@ -167,6 +222,7 @@ def model_args_for(variant: str, module_shapes, hyper: dict,
         return {
             "condition_encoder_args": condition_encoder_args,
             "hypernet_args": hypernet_args,
+            "module_to_group": module_to_group,
         }
     raise ValueError(f"unknown variant {variant!r}")
 
@@ -187,10 +243,11 @@ def build_model(variant: str, module_shapes, hyper: dict,
     if variant == "t2l":
         from mlvla.meta.t2l_style import T2LStyleHyperNet, TwoBranchConditionEncoder
         # T2L uses a two-branch architecture: condition encoder + hypernet
-        # Return a wrapper that combines both
+        # module_to_group maps 456 full keys -> (group_key, real_layer_index)
+        module_to_group = args.pop("module_to_group")
         cond_encoder = TwoBranchConditionEncoder(**args["condition_encoder_args"])
         hypernet = T2LStyleHyperNet(**args["hypernet_args"])
-        return T2LWrapper(cond_encoder, hypernet)
+        return T2LWrapper(cond_encoder, hypernet, module_to_group)
     raise ValueError(f"unknown variant {variant!r}")
 
 
@@ -328,10 +385,13 @@ def main() -> None:
     if pose_cfg is not None:
         from mlvla.meta.view_params import pose_dim_for_scheme
         pose_dim = pose_dim_for_scheme(pose_cfg.get("scheme", "view7"))
-        if args.variant != "concat" and pose_dim != VIEW_DIM:
+        # concat: pose is appended to DINO features -> condition_dim = dino_dim + pose_dim
+        # t2l: pose goes to the geometric branch of TwoBranchConditionEncoder (any dim)
+        # film/film_dropout: pose goes to the view input, only supports VIEW_DIM=7
+        if args.variant not in ("concat", "t2l") and pose_dim != VIEW_DIM:
             raise SystemExit(
                 f"pose_feature scheme {pose_cfg.get('scheme')!r} (pose_dim={pose_dim}) "
-                f"is only wired for the concat variant, not {args.variant!r}")
+                f"is only wired for concat/t2l variants, not {args.variant!r}")
     else:
         pose_dim = VIEW_DIM
     # Optional per-domain sampling weights (default 1.0) and pseudo-domains

@@ -44,22 +44,32 @@ def reservoir_frames(parquet_paths: list[Path], episodes: set[int], frames: int,
 
 
 def first_frames(parquet_paths: list[Path], episodes: set[int]):
-    """First row per episode in file order = frame 0 of that episode."""
+    """Frame 0 per episode, identified by the smallest frame_index.
+
+    Reads ``frame_index`` explicitly and picks the row with the minimum value
+    per episode — does NOT rely on file iteration order, which can break when
+    an episode spans multiple chunk files.
+    """
     import pyarrow.parquet as pq
 
-    firsts: dict[int, bytes] = {}
-    wanted = ["episode_index", "image"]
+    # Collect the row with the smallest frame_index per episode
+    firsts: dict[int, tuple[int, bytes]] = {}  # episode -> (min_frame_idx, image_bytes)
+    wanted = ["episode_index", "frame_index", "image"]
     for parquet_path in parquet_paths:
         parquet = pq.ParquetFile(parquet_path)
         for batch in parquet.iter_batches(batch_size=256, columns=wanted):
             for row in batch.to_pylist():
                 episode = int(row["episode_index"])
-                if episode not in episodes or episode in firsts:
+                if episode not in episodes:
                     continue
+                frame_idx = int(row["frame_index"])
                 raw = row["image"].get("bytes")
-                if raw:
-                    firsts[episode] = raw
-    return sorted(firsts.items())
+                if not raw:
+                    continue
+                prev = firsts.get(episode)
+                if prev is None or frame_idx < prev[0]:
+                    firsts[episode] = (frame_idx, raw)
+    return sorted((ep, raw) for ep, (_, raw) in firsts.items())
 
 
 def split_indices(count: int, seed: int):

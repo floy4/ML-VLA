@@ -65,7 +65,7 @@ def encode_frames(
     hidden_size: int = 1024,
 ) -> dict[str, np.ndarray]:
     """Encode a batch of uint8 frames. Returns {'cls': [N,1024], 'patch': [N,196,1024]} as float32."""
-    if not frames_np_uint8:
+    if frames_np_uint8 is None or len(frames_np_uint8) == 0:
         raise ValueError("empty frame batch")
     pixel_values = _preprocess(frames_np_uint8).to(device=device, dtype=model.dtype)
     out = model(pixel_values=pixel_values)

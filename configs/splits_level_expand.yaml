@@ -1,0 +1,25 @@
+# Level-domain multitask export splits for the 20k expand run (14 training
+# domains): train = 8 view-perturb L1/L2 + add_object L1..L3 + clean, test =
+# the 4 held-out view-pert L3 OOD domains. All 16 keys must be exported so the
+# closed-loop battery (add_object in-domain, L4 constructed OOD, clean LIBERO)
+# has an adapter per domain. Evidence blobs: feature_cache_level (same cache
+# as training).
+fullvw4:
+  train:
+  - camera_L1
+  - camera_L2
+  - lighting_L1
+  - lighting_L2
+  - noise_L1
+  - noise_L2
+  - texture_L1
+  - texture_L2
+  - add_object_L1
+  - add_object_L2
+  - add_object_L3
+  - clean
+  test:
+  - camera_L3
+  - lighting_L3
+  - noise_L3
+  - texture_L3

@@ -15,6 +15,7 @@ mkdir -p "$OUT"
 MLVLA_FAST_PATH=1 \
 MLVLA_DDP_STAGGER_S=420 \
 MLVLA_DDP_NCCL_TIMEOUT_MIN=120 \
+PYTORCH_ALLOC_CONF=expandable_segments:True \
 torchrun --nproc_per_node=8 --master_port=29731 \
   scripts/train_e2e.py \
   --config configs/hypernet_e2e_concat_level_mt_expand.yaml \

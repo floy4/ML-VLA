@@ -43,6 +43,25 @@ def reservoir_frames(parquet_paths: list[Path], episodes: set[int], frames: int,
     return [(episode, values) for episode, values in sorted(reservoirs.items()) if len(values) == frames]
 
 
+def first_frames(parquet_paths: list[Path], episodes: set[int]):
+    """First row per episode in file order = frame 0 of that episode."""
+    import pyarrow.parquet as pq
+
+    firsts: dict[int, bytes] = {}
+    wanted = ["episode_index", "image"]
+    for parquet_path in parquet_paths:
+        parquet = pq.ParquetFile(parquet_path)
+        for batch in parquet.iter_batches(batch_size=256, columns=wanted):
+            for row in batch.to_pylist():
+                episode = int(row["episode_index"])
+                if episode not in episodes or episode in firsts:
+                    continue
+                raw = row["image"].get("bytes")
+                if raw:
+                    firsts[episode] = raw
+    return sorted(firsts.items())
+
+
 def split_indices(count: int, seed: int):
     indices = list(range(count))
     random.Random(seed).shuffle(indices)
@@ -57,6 +76,13 @@ def main() -> None:
     parser.add_argument("--dinov3", type=str, default=__import__("mlvla.paths", fromlist=["PATHS"]).PATHS["dinov3_model"])
     parser.add_argument("--output-dir", type=Path, default=Path(__import__("mlvla.paths", fromlist=["PATHS"]).PATHS["feature_cache_dir"]))
     parser.add_argument("--frames", type=int, default=4)
+    parser.add_argument("--frame-mode", choices=["reservoir", "first"], default="reservoir")
+    parser.add_argument("--manifest-name", default="manifest.json",
+                        help="per-shard manifest filename (parallel shards then merge)")
+    parser.add_argument("--split-registry", default=None,
+                        help="comma list whose sorted order defines domain_index "
+                             "for split seeds; default = the --only set (original "
+                             "build semantics)")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--only", type=str, default=None, help="comma-separated domain ids (debug)")
@@ -73,13 +99,29 @@ def main() -> None:
     if args.only:
         wanted = set(args.only.split(","))
         domains = {k: v for k, v in domains.items() if k in wanted}
+    # Split seeds use seed + domain_index over the sorted split-registry (the
+    # original level cache enumerated its 17-domain --only set; pass that same
+    # list here to reproduce its train/val/test splits exactly).
+    # Registry order is taken verbatim when given: the original level cache was
+    # built in two passes (camera/lighting/noise/texture 12-block, then
+    # add_object/clean 4-block), each condition-major — domain_index must
+    # reproduce those enumerations, not a sorted merge.
+    registry = args.split_registry.split(",") if args.split_registry else sorted(domains)
     model, hidden, num_register, _ = load_dinov3(args.dinov3, device="cuda")
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    manifest = {"seed": args.seed, "frames": args.frames, "model": args.dinov3, "domains": {}}
+    manifest = {"seed": args.seed, "frames": args.frames, "frame_mode": args.frame_mode,
+                "model": args.dinov3, "domains": {}}
 
-    for domain_index, (domain_id, spec) in enumerate(sorted(domains.items())):
+    for domain_index, domain_id in enumerate(registry):
+        if domain_id not in domains:
+            continue
+        spec = domains[domain_id]
         parquets = sorted((Path(spec["dataset_root"]) / "data").glob("chunk-*/file-*.parquet"))
-        samples = reservoir_frames(parquets, set(spec["episodes"]), args.frames, args.seed + domain_index)
+        if args.frame_mode == "first":
+            args.frames = 1
+            samples = [(ep, [raw]) for ep, raw in first_frames(parquets, set(spec["episodes"]))]
+        else:
+            samples = reservoir_frames(parquets, set(spec["episodes"]), args.frames, args.seed + domain_index)
         if not samples:
             raise RuntimeError(f"{domain_id}: reservoir produced no complete episodes")
         frames_np = [np.asarray(Image.open(io.BytesIO(raw)).convert("RGB")) for _, values in samples for raw in values]
@@ -108,8 +150,8 @@ def main() -> None:
             manifest["domains"][domain_id][split] = {"episodes": len(indices)}
         print(f"{domain_id}: {len(samples)} episodes cached", flush=True)
 
-    (args.output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"wrote {args.output_dir}/manifest.json with {len(manifest['domains'])} domains")
+    (args.output_dir / args.manifest_name).write_text(json.dumps(manifest, indent=2) + "\n")
+    print(f"wrote {args.output_dir}/{args.manifest_name} with {len(manifest['domains'])} domains")
 
 
 if __name__ == "__main__":

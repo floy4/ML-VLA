@@ -40,6 +40,69 @@ from mlvla.meta.e2e.lora_mapping import assemble, disassemble
 VIEW_DIM = 7
 
 
+class T2LWrapper(torch.nn.Module):
+    """Wrapper combining TwoBranchConditionEncoder + T2LStyleHyperNet.
+
+    Provides a unified interface compatible with train_bridge's training loop.
+    Forward pass: evidence -> condition encoder -> task embedding -> hypernet -> LoRA predictions.
+
+    The wrapper handles the layer_indices logic: for each module type, generates
+    predictions for all its layers (up to max_layers), then the caller averages
+    over evidence dimension as usual.
+    """
+
+    def __init__(self, condition_encoder, hypernet):
+        super().__init__()
+        self.condition_encoder = condition_encoder
+        self.hypernet = hypernet
+        # Pre-compute layer indices for each module type
+        # In practice, we'll use the actual layer count per module type
+        self._layer_indices_cache = {}
+
+    def forward(self, semantic, geometric):
+        """
+        Args:
+            semantic: [B, K, 4, dino_dim] or [B, K, dino_dim] DINO features
+            geometric: [B, K, pose_dim] pose vectors
+
+        Returns:
+            Dict mapping module_key -> {"A": [B, r, in], "B": [B, out, r]}
+            Averaged over layers for each module type.
+        """
+        # Encode condition
+        task_emb = self.condition_encoder(semantic, geometric)  # [B, task_emb_size]
+
+        # Generate LoRA for each module type
+        output = {}
+        bs = task_emb.shape[0]
+
+        for module_key in self.hypernet.target_modules:
+            # Get actual layer count for this module type
+            # For now, use max_layers (will be refined based on actual module shapes)
+            n_layers = self.hypernet.max_layers
+            layer_indices = torch.arange(n_layers, device=task_emb.device)
+
+            # Expand task_emb for all layers
+            task_emb_expanded = task_emb.unsqueeze(1).expand(bs, n_layers, -1)
+            task_emb_flat = task_emb_expanded.reshape(bs * n_layers, -1)
+            layer_indices_expanded = layer_indices.unsqueeze(0).expand(bs, -1).reshape(-1)
+
+            # Generate LoRA
+            A, B = self.hypernet(task_emb_flat, layer_indices_expanded, module_key)
+
+            # Reshape back: [B*n_layers, r, in] -> [B, n_layers, r, in]
+            A = A.reshape(bs, n_layers, *A.shape[1:])
+            B = B.reshape(bs, n_layers, *B.shape[1:])
+
+            # Average over layers to get one prediction per sample
+            A = A.mean(dim=1)  # [B, r, in]
+            B = B.mean(dim=1)  # [B, out, r]
+
+            output[module_key] = {"A": A, "B": B}
+
+        return output
+
+
 def model_args_for(variant: str, module_shapes, hyper: dict,
                    pose_dim: int = VIEW_DIM) -> dict:
     """Constructor kwargs such that ``Cls(**model_args)`` reconstructs exactly.
@@ -71,12 +134,46 @@ def model_args_for(variant: str, module_shapes, hyper: dict,
             "trunk_layers": int(hyper.get("trunk_layers", 6)),
             "trunk_hidden": int(hyper.get("trunk_hidden", 1024)),
         }
+    if variant == "t2l":
+        # T2L uses two-branch conditioning: semantic (DINO) + geometric (pose)
+        # Parse max_layers from module_shapes (max number of layers across all types)
+        # For simplicity, use a fixed value or derive from config
+        max_layers = int(hyper.get("max_layers", 27))  # Default to 27 (actual max)
+
+        # Condition encoder args
+        condition_encoder_args = {
+            "dino_dim": int(hyper["dino_dim"]),
+            "geo_dim": pose_dim,
+            "hidden_dim": int(hyper.get("condition_hidden_dim", 256)),
+            "task_emb_size": int(hyper.get("task_emb_size", 256)),
+            "fusion": hyper.get("fusion", "additive"),
+            "dropout": float(hyper.get("dropout", 0.05)),
+        }
+
+        # Hypernet args
+        hypernet_args = {
+            "module_shapes": module_shapes,
+            "max_layers": max_layers,
+            "task_emb_size": int(hyper.get("task_emb_size", 256)),
+            "depth_emb_size": int(hyper.get("depth_emb_size", 64)),
+            "type_emb_size": int(hyper.get("type_emb_size", 64)),
+            "trunk_hidden": int(hyper.get("trunk_hidden", 512)),
+            "head_in_size": int(hyper.get("head_in_size", 128)),
+            "lora_rank": int(hyper.get("lora_rank", 16)),
+            "shared_AB_head": bool(hyper.get("shared_AB_head", False)),
+            "dropout": float(hyper.get("dropout", 0.05)),
+        }
+
+        return {
+            "condition_encoder_args": condition_encoder_args,
+            "hypernet_args": hypernet_args,
+        }
     raise ValueError(f"unknown variant {variant!r}")
 
 
 def build_model(variant: str, module_shapes, hyper: dict,
                 pose_dim: int = VIEW_DIM) -> torch.nn.Module:
-    """film/film_dropout -> SharedFiLM; concat -> V4 direct head.
+    """film/film_dropout -> SharedFiLM; concat -> V4 direct head; t2l -> T2L-style.
 
     Constructs from :func:`model_args_for` — the same parameterization that is
     saved into checkpoints, so saving and building can never drift apart.
@@ -87,6 +184,13 @@ def build_model(variant: str, module_shapes, hyper: dict,
         return SharedFiLMABHyperNetwork(**args)
     if variant == "concat":
         return V4DirectABHyperNetwork(**args)
+    if variant == "t2l":
+        from mlvla.meta.t2l_style import T2LStyleHyperNet, TwoBranchConditionEncoder
+        # T2L uses a two-branch architecture: condition encoder + hypernet
+        # Return a wrapper that combines both
+        cond_encoder = TwoBranchConditionEncoder(**args["condition_encoder_args"])
+        hypernet = T2LStyleHyperNet(**args["hypernet_args"])
+        return T2LWrapper(cond_encoder, hypernet)
     raise ValueError(f"unknown variant {variant!r}")
 
 
@@ -171,7 +275,7 @@ def _build_fast_path_perm(keys, sizes_a, sizes_b, shapes, mapping, jax_paths,
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--variant", choices=("film", "film_dropout", "concat"), required=True)
+    parser.add_argument("--variant", choices=("film", "film_dropout", "concat", "t2l"), required=True)
     parser.add_argument("--output", type=Path, required=True)   # /data2/.../e2e_<variant>/
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--steps", type=int, default=None)
@@ -477,6 +581,12 @@ def main() -> None:
             # view_params.append_view_params) -> [k,4,dino+pose_dim]; V4 frame-means.
             cond = torch.cat([x, v.unsqueeze(1).expand(-1, x.shape[1], -1)], dim=-1)
             pred = model(cond)
+        elif args.variant == "t2l":
+            # T2L uses two-branch conditioning: semantic (DINO) + geometric (pose)
+            # x: [B, K, 4, dino_dim] or [B, K, dino_dim]
+            # v: [B, pose_dim]
+            # T2LWrapper handles the layer_indices logic internally
+            pred = model(x, v)
         else:
             pred = model(x, v)
         # mean over k evidence rows -> one LoRA; *scales -> physical values.
@@ -603,6 +713,10 @@ def main() -> None:
                   f"|A|={norms_a:.2f} |B|={norms_b:.2f} lr={lr_at(step):.2e} "
                   f"({(time.time()-t0)/step:.2f}s/it)", flush=True)
         if is_main and (step % val_every == 0 or step == total_steps):
+            # Return cached blocks before the val pass: 2000 steps of training
+            # fragmentation (reserved-but-unallocated) OOM'd the val forward
+            # at 99.6% VRAM in the step-2000 crash.
+            torch.cuda.empty_cache()
             model.eval()
             vls = {}
             with torch.inference_mode():
@@ -617,13 +731,16 @@ def main() -> None:
                     # sum/n equals the .mean(0) the consumer used.
                     sum_a = {k: None for k in keys}
                     sum_b = {k: None for k in keys}
-                    for s in range(0, n_val, 32):
-                        e = ev[s:s + 32]
-                        w = val_views[d].expand(ev.shape[0], -1)[s:s + 32]
+                    for s in range(0, n_val, 16):
+                        e = ev[s:s + 16]
+                        w = val_views[d].expand(ev.shape[0], -1)[s:s + 16]
                         if args.variant == "concat":
                             cond = torch.cat(
                                 [e, w.unsqueeze(1).expand(-1, e.shape[1], -1)], dim=-1)
                             p = model(cond)
+                        elif args.variant == "t2l":
+                            # T2L two-branch conditioning
+                            p = model(e, w)
                         else:
                             p = model(e, w)
                         for k, ab in p.items():
@@ -655,7 +772,7 @@ def main() -> None:
                 "representation": "direct_ab",
                 "source": f"e2e_{args.variant}",
                 "evidence": "dino_film_shared" if args.variant in ("film", "film_dropout")
-                            else "dino_view_v4",
+                            else ("dino_pose_t2l" if args.variant == "t2l" else "dino_view_v4"),
                 "view_dropout": view_dropout,
                 "state_dict": model.state_dict(),
                 "model_args": model_args,

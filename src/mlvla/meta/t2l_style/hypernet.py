@@ -53,7 +53,7 @@ class T2LStyleHyperNet(nn.Module):
     Args:
         module_shapes: Dict mapping group_key -> {"A": (r, in_features), "B": (out_features, r)}
                        Example: {"A16x512_B512x16": {"A": (16, 512), "B": (512, 16)}}
-        max_layers: Maximum number of layers (e.g., 168 for π0.5)
+        max_layers: Maximum number of layers per module type (e.g., 27 for π0.5)
         task_emb_size: Dimension of input task embedding (from TwoBranchConditionEncoder)
         depth_emb_size: Dimension of layer depth embedding
         type_emb_size: Dimension of layer type embedding
@@ -62,10 +62,9 @@ class T2LStyleHyperNet(nn.Module):
         lora_rank: LoRA rank (r)
         shared_AB_head: If True, use single head + per-module learned offset (40M variant)
         dropout: Dropout rate
-        AB_offset: Optional dict of pre-trained offsets for SFT warm-start
 
-    Param count estimate (with head_in_size=128):
-    - Embeddings: (458 depth + 17 type) × 64 ≈ 30K (negligible)
+    Param count estimate (with head_in_size=128, max_layers=27):
+    - Embeddings: (27 depth + 17 type) × 64 ≈ 3K (negligible)
     - Mixer: (256+64+64)×4 → 1536 → 384 linear: ~0.6M
     - Trunk: 2× residual blocks: ~1.2M
     - Heads: 17 groups × (128 × (r×(in+out))) ≈ 17 × 128 × (16×~2000) ≈ 70M
@@ -86,8 +85,6 @@ class T2LStyleHyperNet(nn.Module):
         lora_rank: int = 16,
         shared_AB_head: bool = False,
         dropout: float = 0.05,
-        AB_offset: Optional[dict[str, dict[str, torch.Tensor]]] = None,
-        learnable_AB_offset: bool = False,
     ):
         super().__init__()
         self.max_layers = max_layers
@@ -201,9 +198,6 @@ class T2LStyleHyperNet(nn.Module):
 
         self.heads = nn.ModuleDict(heads)
 
-        # AB_offset for SFT warm-start
-        self.AB_offset = self._init_AB_offset(AB_offset, learnable_AB_offset)
-
         # Pre-compute split shapes for efficient unpacking
         self.split_shapes = {}
         for module in self.target_modules:
@@ -214,45 +208,6 @@ class T2LStyleHyperNet(nn.Module):
 
         # Store scaling factor (can be overridden externally)
         self.scaling = 1.0
-
-    def _init_AB_offset(
-        self,
-        AB_offset: Optional[dict[str, dict[str, torch.Tensor]]],
-        learnable: bool,
-    ) -> nn.ParameterDict:
-        """Initialize AB_offset parameters."""
-        offset = nn.ParameterDict(
-            {
-                "A": nn.ParameterDict(
-                    {
-                        m: nn.Parameter(
-                            torch.zeros(self.max_layers, self.lora_rank, self.in_features[m]),
-                            requires_grad=learnable,
-                        )
-                        for m in self.target_modules
-                    }
-                ),
-                "B": nn.ParameterDict(
-                    {
-                        m: nn.Parameter(
-                            torch.zeros(self.max_layers, self.out_features[m], self.lora_rank),
-                            requires_grad=learnable,
-                        )
-                        for m in self.target_modules
-                    }
-                ),
-            }
-        )
-
-        if AB_offset is not None:
-            # Load pre-trained offsets
-            for m in self.target_modules:
-                if m in AB_offset.get("A", {}):
-                    offset["A"][m].data.copy_(AB_offset["A"][m])
-                if m in AB_offset.get("B", {}):
-                    offset["B"][m].data.copy_(AB_offset["B"][m])
-
-        return offset
 
     def forward(
         self,
@@ -323,11 +278,6 @@ class T2LStyleHyperNet(nn.Module):
             A_flat, B_flat = splitted_out
             A = A_flat.reshape(bs, self.lora_rank, self.in_features[layer_type])
             B = B_flat.reshape(bs, self.lora_rank, self.out_features[layer_type]).transpose(-1, -2)
-
-        # Add AB_offset if in SFT mode
-        # Note: In reconstruction mode, AB_offset is zero and ignored
-        A = A + self.AB_offset["A"][layer_type][layer_indices]
-        B = B + self.AB_offset["B"][layer_type][layer_indices]
 
         return A, B
 

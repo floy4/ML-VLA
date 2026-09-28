@@ -35,7 +35,7 @@ def test_architecture():
         "A16x1024_B1024x16": {"A": (16, 1024), "B": (1024, 16)},
         "A16x2048_B2048x16": {"A": (16, 2048), "B": (2048, 16)},
     }
-    max_layers = 168  # π0.5 has ~168 layers per module type
+    max_layers = 27  # π0.5 has max 27 layers per module type (actual: 18-27)
 
     print(f"\nModule groups: {len(module_shapes)}")
     print(f"Max layers: {max_layers}")

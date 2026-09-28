@@ -47,7 +47,9 @@ training:
   warmup: 100
   clip: 1.0
   val_every: 500
-  save_every: 2500
+  # 1000 (not 2500) after the step-2000 val OOM crash: no ckpt existed yet and
+  # 2000 steps were lost; cap future losses at ~1h of training.
+  save_every: 1000
   evidence_k: 8
 hypernet:            # V4DirectABHyperNetwork (same as e2e_concat_level_mt)
   dino_dim: 1024
